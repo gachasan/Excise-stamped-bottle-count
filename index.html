@@ -60,6 +60,11 @@
   #startBtn.stop { background: #f87171; color: #2a0a0a; }
   #resetBtn { background: rgba(255,255,255,0.12); color: #fff; flex: 0 0 90px; }
   #switchBtn { background: rgba(255,255,255,0.12); color: #fff; flex: 0 0 90px; }
+  #farModeBtn {
+    width: 100%; background: rgba(255,255,255,0.12); color: #ddd;
+    font-size: 14px; padding: 11px;
+  }
+  #farModeBtn.active { background: #38bdf8; color: #04202e; }
 
   #loadingScreen {
     position: absolute; inset: 0; display: flex; flex-direction: column;
@@ -100,6 +105,7 @@
       <input type="range" id="confSlider" min="0.2" max="0.9" step="0.05" value="0.5">
       <span id="confVal">50%</span>
     </div>
+    <button id="farModeBtn">🔍 โหมดไกล/ของเยอะ (ช้าลงแต่แม่นขึ้น)</button>
     <div class="controls">
       <button id="switchBtn">🔄 กล้อง</button>
       <button id="startBtn">▶️ เริ่มนับ</button>
@@ -135,10 +141,16 @@ const errorBox = document.getElementById('errorBox');
 let model = null;
 let running = false;
 let rafId = null;
+let timeoutId = null;
 let currentStream = null;
 let facingMode = 'environment';
 let confThreshold = 0.5;
 let maxCountThisSession = 0;
+let farMode = false;
+
+const farModeBtn = document.getElementById('farModeBtn');
+const tileCanvas = document.createElement('canvas');
+const tileCtx = tileCanvas.getContext('2d');
 
 // Classes we treat as "bottle-like". COCO-SSD only has "bottle" and "wine glass";
 // we count "bottle" primarily.
@@ -161,7 +173,7 @@ async function startCamera() {
   }
   try {
     currentStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: facingMode }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      video: { facingMode: { ideal: facingMode }, width: { ideal: 1920 }, height: { ideal: 1080 } },
       audio: false
     });
     video.srcObject = currentStream;
@@ -179,7 +191,7 @@ function resizeCanvas() {
 
 async function loadModel() {
   loadingText.textContent = 'กำลังโหลดโมเดลตรวจจับวัตถุ...';
-  model = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
+  model = await cocoSsd.load({ base: 'mobilenet_v2' });
   loadingScreen.style.display = 'none';
   statusEl.textContent = 'พร้อมแล้ว กด "เริ่มนับ"';
 }
@@ -207,6 +219,59 @@ function drawDetections(predictions) {
   return count;
 }
 
+function iou(a, b) {
+  const [ax, ay, aw, ah] = a; const [bx, by, bw, bh] = b;
+  const x1 = Math.max(ax, bx), y1 = Math.max(ay, by);
+  const x2 = Math.min(ax + aw, bx + bw), y2 = Math.min(ay + ah, by + bh);
+  const interW = Math.max(0, x2 - x1), interH = Math.max(0, y2 - y1);
+  const inter = interW * interH;
+  const union = aw * ah + bw * bh - inter;
+  return union <= 0 ? 0 : inter / union;
+}
+
+function mergeOverlaps(preds) {
+  const kept = [];
+  preds.sort((a, b) => b.score - a.score);
+  for (const p of preds) {
+    if (!kept.some(k => k.class === p.class && iou(k.bbox, p.bbox) > 0.35)) {
+      kept.push(p);
+    }
+  }
+  return kept;
+}
+
+// Splits the current video frame into a grid of overlapping tiles and runs
+// detection on each tile separately at native resolution. Because each tile
+// covers less area, distant/small bottles appear proportionally larger to
+// the model, which greatly improves detection at range and in dense scenes.
+async function detectTiled(rows, cols) {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw || !vh) return [];
+  const overlap = 0.15;
+  const tileW = vw / cols, tileH = vh / rows;
+  const results = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const sx = Math.max(0, c * tileW - tileW * overlap / 2);
+      const sy = Math.max(0, r * tileH - tileH * overlap / 2);
+      const sw = Math.min(vw - sx, tileW * (1 + overlap));
+      const sh = Math.min(vh - sy, tileH * (1 + overlap));
+      tileCanvas.width = sw;
+      tileCanvas.height = sh;
+      tileCtx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
+      const preds = await model.detect(tileCanvas);
+      preds.forEach(p => {
+        results.push({
+          class: p.class,
+          score: p.score,
+          bbox: [p.bbox[0] + sx, p.bbox[1] + sy, p.bbox[2], p.bbox[3]]
+        });
+      });
+    }
+  }
+  return mergeOverlaps(results);
+}
+
 async function detectLoop() {
   if (!running) return;
   if (video.readyState >= 2) {
@@ -216,18 +281,43 @@ async function detectLoop() {
   rafId = requestAnimationFrame(detectLoop);
 }
 
+async function detectLoopFar() {
+  if (!running) return;
+  if (video.readyState >= 2) {
+    statusEl.textContent = 'กำลังสแกนละเอียด...';
+    const predictions = await detectTiled(2, 3);
+    drawDetections(predictions);
+    if (running) statusEl.textContent = 'โหมดไกล: กำลังตรวจจับ...';
+  }
+  timeoutId = setTimeout(detectLoopFar, 150);
+}
+
+farModeBtn.addEventListener('click', () => {
+  farMode = !farMode;
+  farModeBtn.classList.toggle('active', farMode);
+  farModeBtn.textContent = farMode
+    ? '🔍 โหมดไกล/ของเยอะ (เปิดอยู่)'
+    : '🔍 โหมดไกล/ของเยอะ (ช้าลงแต่แม่นขึ้น)';
+  if (running) {
+    if (rafId) cancelAnimationFrame(rafId);
+    if (timeoutId) clearTimeout(timeoutId);
+    if (farMode) { detectLoopFar(); } else { detectLoop(); }
+  }
+});
+
 startBtn.addEventListener('click', () => {
   running = !running;
   if (running) {
     startBtn.textContent = '⏸️ หยุด';
     startBtn.classList.add('stop');
     statusEl.textContent = 'กำลังตรวจจับ...';
-    detectLoop();
+    if (farMode) { detectLoopFar(); } else { detectLoop(); }
   } else {
     startBtn.textContent = '▶️ เริ่มนับ';
     startBtn.classList.remove('stop');
     statusEl.textContent = 'หยุดชั่วคราว';
     if (rafId) cancelAnimationFrame(rafId);
+    if (timeoutId) clearTimeout(timeoutId);
   }
 });
 
