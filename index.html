@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>นับขวด Real-time</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    background: #0b0b0f; color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    overflow: hidden;
+  }
+  #app { position: relative; width: 100vw; height: 100vh; }
+  #video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+  #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+
+  #topBar {
+    position: absolute; top: 0; left: 0; right: 0;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: 14px 14px 0 14px; z-index: 10; pointer-events: none;
+  }
+  #countBadge {
+    background: rgba(20,20,26,0.75); backdrop-filter: blur(6px);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 18px; padding: 10px 20px; text-align: center;
+    pointer-events: auto;
+  }
+  #countNum { font-size: 40px; font-weight: 800; line-height: 1; color: #4ade80; }
+  #countLabel { font-size: 12px; opacity: 0.7; margin-top: 2px; letter-spacing: 0.5px; }
+
+  #status {
+    background: rgba(20,20,26,0.75); backdrop-filter: blur(6px);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 12px; padding: 8px 12px; font-size: 12px;
+    max-width: 46%; pointer-events: auto;
+  }
+
+  #bottomBar {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    padding: 14px; display: flex; flex-direction: column; gap: 10px;
+    background: linear-gradient(to top, rgba(0,0,0,0.65), transparent);
+    z-index: 10;
+  }
+  .row { display: flex; align-items: center; gap: 10px; }
+  #sliderRow { color: #ddd; font-size: 13px; }
+  #confVal { min-width: 34px; text-align: right; }
+  input[type=range] { flex: 1; accent-color: #4ade80; }
+
+  .controls { display: flex; gap: 10px; }
+  button {
+    flex: 1; padding: 14px; border: none; border-radius: 14px;
+    font-size: 16px; font-weight: 700; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #startBtn { background: #4ade80; color: #06210f; }
+  #startBtn.stop { background: #f87171; color: #2a0a0a; }
+  #resetBtn { background: rgba(255,255,255,0.12); color: #fff; flex: 0 0 90px; }
+  #switchBtn { background: rgba(255,255,255,0.12); color: #fff; flex: 0 0 90px; }
+
+  #loadingScreen {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px; z-index: 20;
+    background: #0b0b0f;
+  }
+  .spinner {
+    width: 44px; height: 44px; border-radius: 50%;
+    border: 4px solid rgba(255,255,255,0.15); border-top-color: #4ade80;
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loadingText { font-size: 14px; opacity: 0.8; }
+  #hidden { display: none !important; }
+
+  #errorBox {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    padding: 24px; text-align: center; z-index: 25; background: #0b0b0f;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <video id="video" playsinline autoplay muted></video>
+  <canvas id="overlay"></canvas>
+
+  <div id="topBar">
+    <div id="countBadge">
+      <div id="countNum">0</div>
+      <div id="countLabel">ขวดในเฟรม</div>
+    </div>
+    <div id="status">กำลังโหลดโมเดล...</div>
+  </div>
+
+  <div id="bottomBar">
+    <div class="row" id="sliderRow">
+      <span>ความมั่นใจ</span>
+      <input type="range" id="confSlider" min="0.2" max="0.9" step="0.05" value="0.5">
+      <span id="confVal">50%</span>
+    </div>
+    <div class="controls">
+      <button id="switchBtn">🔄 กล้อง</button>
+      <button id="startBtn">▶️ เริ่มนับ</button>
+      <button id="resetBtn">รีเซ็ต</button>
+    </div>
+  </div>
+
+  <div id="loadingScreen">
+    <div class="spinner"></div>
+    <div id="loadingText">กำลังโหลดโมเดลตรวจจับวัตถุ...</div>
+  </div>
+
+  <div id="errorBox" class="hidden" style="display:none;"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tensorflow/4.11.0/tf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/coco-ssd/2.2.2/coco-ssd.min.js"></script>
+<script>
+const video = document.getElementById('video');
+const overlay = document.getElementById('overlay');
+const ctx = overlay.getContext('2d');
+const countNum = document.getElementById('countNum');
+const statusEl = document.getElementById('status');
+const startBtn = document.getElementById('startBtn');
+const resetBtn = document.getElementById('resetBtn');
+const switchBtn = document.getElementById('switchBtn');
+const confSlider = document.getElementById('confSlider');
+const confVal = document.getElementById('confVal');
+const loadingScreen = document.getElementById('loadingScreen');
+const loadingText = document.getElementById('loadingText');
+const errorBox = document.getElementById('errorBox');
+
+let model = null;
+let running = false;
+let rafId = null;
+let currentStream = null;
+let facingMode = 'environment';
+let confThreshold = 0.5;
+let maxCountThisSession = 0;
+
+// Classes we treat as "bottle-like". COCO-SSD only has "bottle" and "wine glass";
+// we count "bottle" primarily.
+const TARGET_CLASSES = ['bottle'];
+
+confSlider.addEventListener('input', () => {
+  confThreshold = parseFloat(confSlider.value);
+  confVal.textContent = Math.round(confThreshold * 100) + '%';
+});
+
+function showError(msg) {
+  loadingScreen.style.display = 'none';
+  errorBox.style.display = 'flex';
+  errorBox.textContent = msg;
+}
+
+async function startCamera() {
+  if (currentStream) {
+    currentStream.getTracks().forEach(t => t.stop());
+  }
+  try {
+    currentStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: facingMode }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    });
+    video.srcObject = currentStream;
+    await new Promise(res => { video.onloadedmetadata = () => { video.play(); res(); }; });
+    resizeCanvas();
+  } catch (err) {
+    showError('เปิดกล้องไม่ได้: ' + err.message + '\n\nโปรดอนุญาตการใช้กล้อง และเปิดหน้านี้ผ่าน HTTPS');
+  }
+}
+
+function resizeCanvas() {
+  overlay.width = video.videoWidth || window.innerWidth;
+  overlay.height = video.videoHeight || window.innerHeight;
+}
+
+async function loadModel() {
+  loadingText.textContent = 'กำลังโหลดโมเดลตรวจจับวัตถุ...';
+  model = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
+  loadingScreen.style.display = 'none';
+  statusEl.textContent = 'พร้อมแล้ว กด "เริ่มนับ"';
+}
+
+function drawDetections(predictions) {
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
+  let count = 0;
+  predictions.forEach(pred => {
+    if (!TARGET_CLASSES.includes(pred.class) || pred.score < confThreshold) return;
+    count++;
+    const [x, y, w, h] = pred.bbox;
+    ctx.strokeStyle = '#4ade80';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(x, y, w, h);
+    const label = `ขวด ${Math.round(pred.score * 100)}%`;
+    ctx.font = 'bold 16px sans-serif';
+    const textW = ctx.measureText(label).width;
+    ctx.fillStyle = 'rgba(74, 222, 128, 0.9)';
+    ctx.fillRect(x, y > 22 ? y - 22 : y, textW + 10, 22);
+    ctx.fillStyle = '#06210f';
+    ctx.fillText(label, x + 5, y > 22 ? y - 6 : y + 16);
+  });
+  countNum.textContent = count;
+  if (count > maxCountThisSession) maxCountThisSession = count;
+  return count;
+}
+
+async function detectLoop() {
+  if (!running) return;
+  if (video.readyState >= 2) {
+    const predictions = await model.detect(video);
+    drawDetections(predictions);
+  }
+  rafId = requestAnimationFrame(detectLoop);
+}
+
+startBtn.addEventListener('click', () => {
+  running = !running;
+  if (running) {
+    startBtn.textContent = '⏸️ หยุด';
+    startBtn.classList.add('stop');
+    statusEl.textContent = 'กำลังตรวจจับ...';
+    detectLoop();
+  } else {
+    startBtn.textContent = '▶️ เริ่มนับ';
+    startBtn.classList.remove('stop');
+    statusEl.textContent = 'หยุดชั่วคราว';
+    if (rafId) cancelAnimationFrame(rafId);
+  }
+});
+
+resetBtn.addEventListener('click', () => {
+  maxCountThisSession = 0;
+  countNum.textContent = '0';
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
+});
+
+switchBtn.addEventListener('click', async () => {
+  facingMode = facingMode === 'environment' ? 'user' : 'environment';
+  await startCamera();
+});
+
+window.addEventListener('resize', resizeCanvas);
+
+(async function init() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showError('เบราว์เซอร์นี้ไม่รองรับการเข้าถึงกล้อง (ต้องใช้ HTTPS และเบราว์เซอร์สมัยใหม่)');
+    return;
+  }
+  await startCamera();
+  try {
+    await loadModel();
+  } catch (err) {
+    showError('โหลดโมเดลไม่สำเร็จ: ' + err.message);
+  }
+})();
+</script>
+</body>
+</html>
