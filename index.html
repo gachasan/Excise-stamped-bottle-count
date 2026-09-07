@@ -6,7 +6,19 @@
   <title>ระบบนับขวดด้วย Smart Template</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    body { touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+    /* ล็อกหน้าจอแบบสมบูรณ์ ไม่ให้เลื่อน ไม่ให้เด้ง */
+    html, body { 
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden; 
+      overscroll-behavior: none; 
+      touch-action: none; 
+      user-select: none; 
+      -webkit-user-select: none; 
+    }
+    
     /* แถบ Progress Bar แนวตั้ง */
     .meter-container { height: 100%; width: 20px; background: #333; border-radius: 10px; overflow: hidden; position: relative; }
     .meter-fill { position: absolute; bottom: 0; width: 100%; background: #22c55e; transition: height 0.1s, background-color 0.1s; }
@@ -35,7 +47,8 @@
     <div class="absolute right-4 top-1/4 h-1/2 flex flex-col items-center z-20">
       <div class="text-[10px] font-bold mb-1">ความเหมือน</div>
       <div class="meter-container border border-slate-600">
-        <div id="meter-threshold" class="meter-threshold" style="bottom: 70%;"></div>
+        <!-- ขีดแดงจะถูกตั้งค่าความสูงจาก JS อัตโนมัติ -->
+        <div id="meter-threshold" class="meter-threshold"></div>
         <div id="meter-fill" class="meter-fill" style="height: 0%;"></div>
       </div>
       <div id="score-text" class="text-[10px] mt-1 font-mono">0%</div>
@@ -66,6 +79,11 @@
   </div>
 
   <script>
+    // ป้องกันหน้าจอขยับ/เด้งเวลาใช้นิ้วเลื่อนบนมือถือเด็ดขาด
+    document.addEventListener('touchmove', function(event) {
+      event.preventDefault();
+    }, { passive: false });
+
     const video = document.getElementById('webcam');
     const targetBox = document.getElementById('target-box');
     const lockBtn = document.getElementById('lock-btn');
@@ -73,6 +91,7 @@
     const countDisplay = document.getElementById('count-display');
     const statusText = document.getElementById('status-text');
     const meterFill = document.getElementById('meter-fill');
+    const meterThresholdLine = document.getElementById('meter-threshold');
     const scoreText = document.getElementById('score-text');
 
     const offCanvas = document.createElement('canvas');
@@ -83,8 +102,15 @@
     let bottleCount = 0;
     let isObjectPresent = false;
     const BOX_SIZE = 80; // ขนาดพื้นที่เป้าหมาย (พิกเซล)
-    const MATCH_THRESHOLD = 70; // ความเหมือนที่ถือว่าใช่ (%)
-    const RELEASE_THRESHOLD = 40; // ความเหมือนที่ถือว่าหลุดกรอบแล้ว (%)
+    
+    // ==========================================
+    // ปรับลดบาร์เกณฑ์ความเหมือนตรงนี้
+    // ==========================================
+    const MATCH_THRESHOLD = 55; // จากเดิม 70 ลดเหลือ 55 เพื่อให้นับง่ายขึ้น
+    const RELEASE_THRESHOLD = 40; // ความเหมือนตกลงมาต่ำกว่านี้ถึงจะเคลียร์สถานะเพื่อนับชิ้นต่อไป
+    
+    // ตั้งค่าขีดแดงในหลอดให้ตรงกับค่า MATCH_THRESHOLD อัตโนมัติ
+    meterThresholdLine.style.bottom = `${MATCH_THRESHOLD}%`;
 
     // เสียง ิBeep เวลานับ
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -119,7 +145,6 @@
     }
 
     // 2. คำนวณ Histogram (สร้างลายนิ้วมือภาพ)
-    // แบ่งสี RGB เป็น 64 กลุ่ม (4x4x4) เพื่อความรวดเร็วและทนทานต่อแสงที่เปลี่ยนไป
     function getHistogram(imageData) {
       let hist = new Array(64).fill(0);
       let data = imageData.data;
@@ -137,7 +162,7 @@
       return hist.map(val => val / pixelCount);
     }
 
-    // 3. เปรียบเทียบความเหมือนของ Histogram 2 ตัว (Bhattacharyya/Intersection)
+    // 3. เปรียบเทียบความเหมือนของ Histogram 2 ตัว
     function compareHistograms(hist1, hist2) {
       let score = 0;
       for (let i = 0; i < hist1.length; i++) {
