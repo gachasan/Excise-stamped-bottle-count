@@ -2,84 +2,113 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>ระบบนับขวดด้วย Smart Template</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    /* ล็อกหน้าจอแบบสมบูรณ์ ไม่ให้เลื่อน ไม่ให้เด้ง */
-    html, body { 
+    /* ล็อกหน้าจอให้อยู่ในพื้นที่ 100dvh นิ่งสนิท ไม่เกิดการ Scroll */
+    html, body {
       margin: 0;
       padding: 0;
       width: 100%;
-      height: 100%;
-      overflow: hidden; 
-      overscroll-behavior: none; 
-      touch-action: none; 
-      user-select: none; 
-      -webkit-user-select: none; 
+      height: 100dvh;
+      overflow: hidden;
+      overscroll-behavior: none;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
     }
-    
+
     /* แถบ Progress Bar แนวตั้ง */
-    .meter-container { height: 100%; width: 20px; background: #333; border-radius: 10px; overflow: hidden; position: relative; }
-    .meter-fill { position: absolute; bottom: 0; width: 100%; background: #22c55e; transition: height 0.1s, background-color 0.1s; }
-    .meter-threshold { position: absolute; width: 100%; height: 2px; background: red; z-index: 10; }
+    .meter-container { height: 100%; width: 16px; background: #1e293b; border-radius: 8px; overflow: hidden; position: relative; }
+    .meter-fill { position: absolute; bottom: 0; width: 100%; background: #22c55e; transition: height 0.08s, background-color 0.08s; }
+    .meter-threshold { position: absolute; width: 100%; height: 2px; background: #ef4444; z-index: 10; }
+    .meter-baseline { position: absolute; width: 100%; height: 2px; background: #3b82f6; z-index: 9; opacity: 0.8; }
   </style>
 </head>
-<body class="bg-slate-900 text-white min-h-screen flex flex-col items-center justify-between p-4">
+<body class="bg-slate-900 text-white h-[100dvh] w-screen flex flex-col items-center justify-between p-3">
 
-  <!-- Header -->
-  <header class="text-center w-full max-w-sm my-2">
-    <h1 class="text-lg font-bold text-blue-400">Smart Template Counter</h1>
-    <p class="text-xs text-slate-400">เล็งเป้า ล็อกวัตถุอ้างอิง แล้วกวาดกล้องนับ</p>
+  <!-- Header (ขนาดกะทัดรัด) -->
+  <header class="text-center w-full max-w-sm shrink-0">
+    <h1 class="text-base font-bold text-blue-400 leading-tight">Smart Template Counter</h1>
+    <p class="text-[11px] text-slate-400">ระบบสแกนนับอัตโนมัติ (Trend Detect & Distance Zoom)</p>
   </header>
 
-  <!-- Container แสดงผลกล้อง -->
-  <div class="relative w-full max-w-sm aspect-[3/4] bg-black rounded-2xl overflow-hidden border-2 border-slate-700 shadow-2xl flex items-center justify-center">
+  <!-- Container แสดงผลกล้อง (ปรับความสูงยืดหยุ่นตามหน้าจออัตโนมัติ) -->
+  <div class="relative w-full max-w-sm flex-1 min-h-0 bg-black rounded-2xl overflow-hidden border-2 border-slate-700 shadow-2xl flex items-center justify-center my-2">
     <video id="webcam" autoplay playsinline muted class="w-full h-full object-cover"></video>
-    
-    <!-- กรอบเป้าหมาย (Target Box) -->
-    <div id="target-box" class="absolute w-24 h-24 border-4 border-dashed border-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.5)] transition-colors duration-200 z-10 flex items-center justify-center">
-      <!-- จุดศูนย์กลาง -->
+
+    <!-- กรอบเป้าหมาย (ปรับขนาดขนาดไดนามิกตาม Slider) -->
+    <div id="target-box" class="absolute border-4 border-dashed border-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.5)] transition-all duration-100 z-10 flex items-center justify-center" style="width: 80px; height: 80px;">
       <div class="w-2 h-2 bg-yellow-400 rounded-full"></div>
     </div>
 
-    <!-- แถบวัดความเหมือน (Similarity Meter) ด้านขวา -->
-    <div class="absolute right-4 top-1/4 h-1/2 flex flex-col items-center z-20">
-      <div class="text-[10px] font-bold mb-1">ความเหมือน</div>
+    <!-- แถบวัดความเหมือน (Similarity Meter) -->
+    <div class="absolute right-3 top-1/6 h-2/3 flex flex-col items-center z-20">
+      <div class="text-[9px] font-bold mb-1 text-slate-300">ความเหมือน</div>
       <div class="meter-container border border-slate-600">
-        <!-- ขีดแดงจะถูกตั้งค่าความสูงจาก JS อัตโนมัติ -->
+        <!-- ขีดแดง = เกณฑ์สูงสุด / ขีดฟ้า = ค่าพื้นหลัง (Baseline) -->
         <div id="meter-threshold" class="meter-threshold"></div>
+        <div id="meter-baseline" class="meter-baseline" style="bottom: 0%;"></div>
         <div id="meter-fill" class="meter-fill" style="height: 0%;"></div>
       </div>
-      <div id="score-text" class="text-[10px] mt-1 font-mono">0%</div>
+      <div id="score-text" class="text-[10px] mt-1 font-mono font-bold">0%</div>
+    </div>
+
+    <!-- Badge แสดงค่าสถิติพื้นหลัง -->
+    <div class="absolute top-2 left-2 bg-slate-900/80 backdrop-blur px-2 py-1 rounded-md border border-slate-700 text-[10px] font-mono z-20">
+      <span class="text-slate-400">พื้นหลัง: </span>
+      <span id="baseline-text" class="text-blue-400 font-bold">0%</span>
     </div>
   </div>
 
-  <!-- แผงควบคุมและสรุปยอด -->
-  <div class="w-full max-w-sm bg-slate-800 p-4 rounded-xl shadow-lg border border-slate-700 space-y-4">
-    
-    <div class="flex justify-between items-center bg-slate-900 p-3 rounded-lg border border-slate-700">
+  <!-- แผงควบคุมและสรุปยอด (ความสูงคงที่ ล็อคด้านล่าง) -->
+  <div class="w-full max-w-sm bg-slate-800 p-3 rounded-xl shadow-lg border border-slate-700 space-y-2.5 shrink-0">
+
+    <!-- ยอดรวมและปุ่มรีเซ็ต -->
+    <div class="flex justify-between items-center bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-700">
       <div>
-        <span class="text-xs text-slate-400">ยอดตรวจนับปัจจุบัน</span>
-        <div id="count-display" class="text-4xl font-extrabold text-green-400">0</div>
+        <span class="text-[10px] text-slate-400">ยอดตรวจนับปัจจุบัน</span>
+        <div id="count-display" class="text-3xl font-extrabold text-green-400 leading-tight">0</div>
       </div>
-      <button id="reset-btn" class="bg-slate-700 hover:bg-slate-600 text-white text-xs px-4 py-2 rounded-lg font-semibold transition">
+      <button id="reset-btn" class="bg-slate-700 hover:bg-slate-600 active:scale-95 text-white text-xs px-3 py-1.5 rounded-lg font-semibold transition">
         รีเซ็ต
       </button>
     </div>
 
+    <!-- ส่วนปรับแต่งขนาดกรอบ และ ซูมกล้อง -->
+    <div class="grid grid-cols-2 gap-2 bg-slate-900/70 p-2 rounded-lg border border-slate-700/50">
+      <!-- ตัวปรับขนาดกรอบเป้าหมาย -->
+      <div class="flex flex-col gap-1">
+        <div class="flex justify-between text-[10px] text-slate-300">
+          <span>ขนาดกรอบ</span>
+          <span id="box-size-label" class="text-yellow-400 font-bold">80px</span>
+        </div>
+        <input type="range" id="box-size-slider" min="30" max="140" value="80" step="5" class="w-full accent-yellow-400 h-1.5 bg-slate-700 rounded-lg cursor-pointer">
+      </div>
+
+      <!-- ตัวปรับซูมกล้อง -->
+      <div class="flex flex-col gap-1">
+        <div class="flex justify-between text-[10px] text-slate-300">
+          <span>ซูมกล้อง</span>
+          <span id="zoom-label" class="text-blue-400 font-bold">1.0x</span>
+        </div>
+        <input type="range" id="zoom-slider" min="1" max="4" value="1" step="0.1" class="w-full accent-blue-400 h-1.5 bg-slate-700 rounded-lg cursor-pointer" disabled>
+      </div>
+    </div>
+
     <!-- ปุ่มควบคุมระบบ -->
-    <button id="lock-btn" class="w-full bg-yellow-500 hover:bg-yellow-400 text-slate-900 text-lg py-4 rounded-xl font-bold shadow-lg transition active:scale-95">
+    <button id="lock-btn" class="w-full bg-yellow-500 hover:bg-yellow-400 text-slate-900 text-base py-2.5 rounded-xl font-bold shadow-lg transition active:scale-95">
       🔒 เล็งแล้วกดล็อกเป้าหมาย (Lock Target)
     </button>
 
-    <div class="text-[11px] text-slate-400 text-center">
+    <div class="text-[10px] text-slate-400 text-center leading-tight">
       สถานะ: <span id="status-text" class="font-bold text-yellow-400">กรุณาล็อกเป้าหมายก่อนสแกน</span>
     </div>
   </div>
 
   <script>
-    // ป้องกันหน้าจอขยับ/เด้งเวลาใช้นิ้วเลื่อนบนมือถือเด็ดขาด
+    // ป้องกันการสัมผัสแล้วหน้าจอขยับ/เด้ง
     document.addEventListener('touchmove', function(event) {
       event.preventDefault();
     }, { passive: false });
@@ -92,34 +121,41 @@
     const statusText = document.getElementById('status-text');
     const meterFill = document.getElementById('meter-fill');
     const meterThresholdLine = document.getElementById('meter-threshold');
+    const meterBaselineLine = document.getElementById('meter-baseline');
     const scoreText = document.getElementById('score-text');
+    const baselineText = document.getElementById('baseline-text');
+
+    const boxSizeSlider = document.getElementById('box-size-slider');
+    const boxSizeLabel = document.getElementById('box-size-label');
+    const zoomSlider = document.getElementById('zoom-slider');
+    const zoomLabel = document.getElementById('zoom-label');
 
     const offCanvas = document.createElement('canvas');
     const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
 
+    let videoTrack = null;
     let isScanning = false;
     let templateHistogram = null;
     let bottleCount = 0;
     let isObjectPresent = false;
-    const BOX_SIZE = 80; // ขนาดพื้นที่เป้าหมาย (พิกเซล)
     
-    // ==========================================
-    // ปรับลดบาร์เกณฑ์ความเหมือนตรงนี้
-    // ==========================================
-    const MATCH_THRESHOLD = 55; // จากเดิม 70 ลดเหลือ 55 เพื่อให้นับง่ายขึ้น
-    const RELEASE_THRESHOLD = 40; // ความเหมือนตกลงมาต่ำกว่านี้ถึงจะเคลียร์สถานะเพื่อนับชิ้นต่อไป
+    let boxSize = 80; // ขนาดเริ่มต้น
+    const MATCH_THRESHOLD = 50; // เกณฑ์ความเหมือนสูงสุดแบบคงที่
     
-    // ตั้งค่าขีดแดงในหลอดให้ตรงกับค่า MATCH_THRESHOLD อัตโนมัติ
+    // ตัวแปรสำหรับ Trend Detection (วิเคราะห์แนวโน้มเด้งขึ้นลง)
+    let ambientBaseline = 10; // ค่าความเหมือนพื้นหลังเฉลี่ย
+    const SPIKE_DELTA = 16;   // ความแตกต่างที่เด้งขึ้นจากพื้นหลังถือว่าพบวัตถุ (+16%)
+
     meterThresholdLine.style.bottom = `${MATCH_THRESHOLD}%`;
 
-    // เสียง ิBeep เวลานับ
+    // เสียง Beep เวลานับ
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     function playBeep() {
       if(audioCtx.state === 'suspended') audioCtx.resume();
       const oscillator = audioCtx.createOscillator();
       const gainNode = audioCtx.createGain();
       oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // เสียงแหลม
+      oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
       gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
       oscillator.connect(gainNode);
       gainNode.connect(audioCtx.destination);
@@ -127,89 +163,135 @@
       setTimeout(() => oscillator.stop(), 100);
     }
 
-    // 1. เปิดกล้อง
+    // 1. เปิดกล้องและตั้งค่าการซูม
     async function initCamera() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' }, width: { ideal: 640 }, height: { ideal: 480 } },
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
           audio: false
         });
         video.srcObject = stream;
         await video.play();
-        offCanvas.width = BOX_SIZE;
-        offCanvas.height = BOX_SIZE;
+
+        videoTrack = stream.getVideoTracks()[0];
+        initZoomCapabilities();
+
+        updateBoxSize(parseInt(boxSizeSlider.value));
         requestAnimationFrame(processLoop);
       } catch (err) {
-        alert('ไม่สามารถเปิดกล้องได้');
+        alert('ไม่สามารถเปิดกล้องได้: ' + err.message);
       }
     }
 
-    // 2. คำนวณ Histogram (สร้างลายนิ้วมือภาพ)
+    // ตรวจสอบความสามารถในการซูมกล้องของมือถือ
+    function initZoomCapabilities() {
+      if (!videoTrack || !videoTrack.getCapabilities) return;
+      const capabilities = videoTrack.getCapabilities();
+
+      if (capabilities.zoom) {
+        zoomSlider.min = capabilities.zoom.min;
+        zoomSlider.max = capabilities.zoom.max;
+        zoomSlider.step = capabilities.zoom.step || 0.1;
+        zoomSlider.value = capabilities.zoom.min;
+        zoomSlider.disabled = false;
+        zoomLabel.innerText = `${capabilities.zoom.min.toFixed(1)}x`;
+      } else {
+        zoomLabel.innerText = 'ไม่รองรับ';
+        zoomSlider.disabled = true;
+      }
+    }
+
+    // ปรับการซูมกล้องเมื่อเลื่อน Slider
+    zoomSlider.addEventListener('input', (e) => {
+      const val = parseFloat(e.target.value);
+      zoomLabel.innerText = `${val.toFixed(1)}x`;
+      if (videoTrack && videoTrack.applyConstraints) {
+        videoTrack.applyConstraints({ advanced: [{ zoom: val }] }).catch(() => {});
+      }
+    });
+
+    // ปรับขนาดกรอบสี่เหลี่ยมเป้าหมาย
+    boxSizeSlider.addEventListener('input', (e) => {
+      updateBoxSize(parseInt(e.target.value));
+    });
+
+    function updateBoxSize(size) {
+      boxSize = size;
+      boxSizeLabel.innerText = `${size}px`;
+      targetBox.style.width = `${size}px`;
+      targetBox.style.height = `${size}px`;
+      offCanvas.width = size;
+      offCanvas.height = size;
+    }
+
+    // 2. คำนวณ Histogram (ลายนิ้วมือภาพ)
     function getHistogram(imageData) {
       let hist = new Array(64).fill(0);
       let data = imageData.data;
       let pixelCount = data.length / 4;
       
       for (let i = 0; i < data.length; i += 4) {
-        let r = Math.floor(data[i] / 64);   // ค่า 0-3
-        let g = Math.floor(data[i+1] / 64); // ค่า 0-3
-        let b = Math.floor(data[i+2] / 64); // ค่า 0-3
+        let r = Math.floor(data[i] / 64);
+        let g = Math.floor(data[i+1] / 64);
+        let b = Math.floor(data[i+2] / 64);
         let index = (r << 4) | (g << 2) | b;
         hist[index]++;
       }
-      
-      // แปลงเป็นเปอร์เซ็นต์สัดส่วน
       return hist.map(val => val / pixelCount);
     }
 
-    // 3. เปรียบเทียบความเหมือนของ Histogram 2 ตัว
+    // 3. เปรียบเทียบความเหมือน Histogram
     function compareHistograms(hist1, hist2) {
       let score = 0;
       for (let i = 0; i < hist1.length; i++) {
-        score += Math.min(hist1[i], hist2[i]); // ยิ่งพื้นที่ทับซ้อนกันมาก ยิ่งเหมือน
+        score += Math.min(hist1[i], hist2[i]);
       }
       return Math.round(score * 100);
     }
 
-    // 4. วงจรการประมวลผล (รันตลอดเวลา)
+    // 4. วงจรประมวลผลกล้อง + อัลกอริทึมวิเคราะห์ Trend/Spike
     function processLoop() {
       if (video.readyState === video.HAVE_ENOUGH_DATA) {
         
-        // ดึงภาพเฉพาะตรงกลางกรอบเป้าหมาย
-        const sx = (video.videoWidth / 2) - (BOX_SIZE / 2);
-        const sy = (video.videoHeight / 2) - (BOX_SIZE / 2);
+        const sx = (video.videoWidth / 2) - (boxSize / 2);
+        const sy = (video.videoHeight / 2) - (boxSize / 2);
         
-        offCtx.drawImage(video, sx, sy, BOX_SIZE, BOX_SIZE, 0, 0, BOX_SIZE, BOX_SIZE);
-        const imgData = offCtx.getImageData(0, 0, BOX_SIZE, BOX_SIZE);
+        offCtx.drawImage(video, sx, sy, boxSize, boxSize, 0, 0, boxSize, boxSize);
+        const imgData = offCtx.getImageData(0, 0, boxSize, boxSize);
         
         if (isScanning && templateHistogram) {
           const currentHistogram = getHistogram(imgData);
           const matchScore = compareHistograms(templateHistogram, currentHistogram);
           
-          // อัปเดต UI แถบวัดความเหมือน
           meterFill.style.height = `${matchScore}%`;
           scoreText.innerText = `${matchScore}%`;
-          
-          if (matchScore >= MATCH_THRESHOLD) {
-            meterFill.style.backgroundColor = '#22c55e'; // สีเขียว
-          } else {
-            meterFill.style.backgroundColor = '#eab308'; // สีเหลือง
+
+          // ปรับปรุงค่าเฉลี่ยพื้นหลังแบบเรียลไทม์ (เมื่อไม่มีวัตถุอยู่ในกรอบ)
+          if (!isObjectPresent) {
+            ambientBaseline = Math.round((ambientBaseline * 0.9) + (matchScore * 0.1));
+            meterBaselineLine.style.bottom = `${ambientBaseline}%`;
+            baselineText.innerText = `${ambientBaseline}%`;
           }
 
-          // กลไกการนับ (Peak Detection)
-          if (matchScore >= MATCH_THRESHOLD && !isObjectPresent) {
+          // เกณฑ์ไดนามิก: ใช้ค่าที่ต่ำกว่าระหว่าง "MATCH_THRESHOLD คงที่" หรือ "พื้นหลัง + SPIKE_DELTA"
+          const dynamicTriggerThreshold = Math.min(MATCH_THRESHOLD, ambientBaseline + SPIKE_DELTA);
+
+          // เช็คว่าค่าความเหมือน "เด้งสูงขึ้น" กว่าค่าพื้นหลังอย่างมีนัยสำคัญหรือไม่
+          if (matchScore >= dynamicTriggerThreshold && !isObjectPresent) {
             // วัตถุเข้ามาในกรอบแล้ว
             isObjectPresent = true;
+            meterFill.style.backgroundColor = '#22c55e'; // สีเขียว
             targetBox.classList.replace('border-blue-500', 'border-green-500');
             targetBox.style.backgroundColor = 'rgba(34, 197, 94, 0.2)';
             
-          } else if (matchScore <= RELEASE_THRESHOLD && isObjectPresent) {
-            // วัตถุผ่านพ้นกรอบไปแล้ว ให้นับ +1
+          } else if (matchScore <= (ambientBaseline + 6) && isObjectPresent) {
+            // วัตถุผ่านพ้นกรอบออกไปแล้ว (ค่าสวิงกลับลงมาใกล้เคียงค่าพื้นหลัง) -> นับ +1
             isObjectPresent = false;
             bottleCount++;
             countDisplay.innerText = bottleCount;
             playBeep();
             
+            meterFill.style.backgroundColor = '#eab308'; // สีเหลือง
             targetBox.classList.replace('border-green-500', 'border-blue-500');
             targetBox.style.backgroundColor = 'transparent';
           }
@@ -218,30 +300,28 @@
       requestAnimationFrame(processLoop);
     }
 
-    // 5. จัดการปุ่มกดล็อกเป้าหมาย
+    // 5. ปุ่มล็อกเป้าหมาย
     lockBtn.addEventListener('click', () => {
       if (!isScanning) {
-        // ทำการล็อกเป้าหมาย
-        const sx = (video.videoWidth / 2) - (BOX_SIZE / 2);
-        const sy = (video.videoHeight / 2) - (BOX_SIZE / 2);
-        offCtx.drawImage(video, sx, sy, BOX_SIZE, BOX_SIZE, 0, 0, BOX_SIZE, BOX_SIZE);
-        const imgData = offCtx.getImageData(0, 0, BOX_SIZE, BOX_SIZE);
+        const sx = (video.videoWidth / 2) - (boxSize / 2);
+        const sy = (video.videoHeight / 2) - (boxSize / 2);
+        offCtx.drawImage(video, sx, sy, boxSize, boxSize, 0, 0, boxSize, boxSize);
+        const imgData = offCtx.getImageData(0, 0, boxSize, boxSize);
         
         templateHistogram = getHistogram(imgData);
         isScanning = true;
+        ambientBaseline = 10; // รีเซ็ตค่าพื้นหลังเริ่มต้น
         
-        // ปรับ UI
         lockBtn.innerHTML = '🛑 ยกเลิกการล็อกเป้าหมาย';
         lockBtn.classList.replace('bg-yellow-500', 'bg-red-500');
         lockBtn.classList.replace('hover:bg-yellow-400', 'hover:bg-red-400');
         lockBtn.classList.replace('text-slate-900', 'text-white');
         
         targetBox.classList.replace('border-yellow-400', 'border-blue-500');
-        statusText.innerHTML = 'กำลังสแกน... <span class="text-white">เลื่อนกล้องเพื่อนับขวดถัดไปได้เลย</span>';
+        statusText.innerHTML = 'กำลังสแกน... <span class="text-white">เลื่อนกล้องผ่านวัตถุเพื่อนับได้เลย</span>';
         statusText.classList.replace('text-yellow-400', 'text-blue-400');
         playBeep();
       } else {
-        // ยกเลิกการล็อก
         isScanning = false;
         templateHistogram = null;
         isObjectPresent = false;
