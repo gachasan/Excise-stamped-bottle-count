@@ -1,350 +1,645 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="th">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>นับขวด Real-time</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>นับขวด — Bottle Count</title>
 <style>
-  * { box-sizing: border-box; }
-  html, body {
-    margin: 0; padding: 0; width: 100%; height: 100%;
-    background: #0b0b0f; color: #fff;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    overflow: hidden;
+  :root{
+    --bg: #0e1512;
+    --panel: #141d19;
+    --panel-2: #1a2521;
+    --line: #2a3833;
+    --text: #eef3f0;
+    --dim: #93a29b;
+    --amber: #d9a441;
+    --green: #5bb98c;
+    --red: #d9645b;
+    --row-a: #5bb98c;
+    --row-b: #4aa3d9;
+    --row-c: #d9a441;
+    --row-d: #c07ad9;
+    --row-e: #d9645b;
   }
-  #app { position: fixed; inset: 0; width: 100%; height: 100%; }
-  #video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
-  #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
+  html,body{
+    margin:0; padding:0; height:100%; background:var(--bg); color:var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans Thai", sans-serif;
+    overscroll-behavior: none;
+  }
+  #app{
+    height:100dvh; display:flex; flex-direction:column;
+  }
+  header{
+    padding: 14px 16px 10px;
+    display:flex; align-items:baseline; justify-content:space-between;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
+  }
+  header .title{ font-size: 17px; font-weight: 600; letter-spacing: 0.2px; }
+  header .total{ font-size: 13px; color: var(--dim); }
+  header .total b{ color: var(--amber); font-size: 16px; font-weight: 700; }
 
-  #topBar {
-    position: fixed; top: 0; left: 0; right: 0;
-    display: flex; justify-content: space-between; align-items: flex-start;
-    padding: calc(env(safe-area-inset-top, 0px) + 14px) 14px 0 14px;
-    z-index: 10; pointer-events: none;
+  #stage{
+    position: relative; flex: 1; min-height: 0;
+    background: #000;
+    display:flex; align-items:center; justify-content:center;
+    overflow:hidden;
+    touch-action: none;
   }
-  #countBadge {
-    background: rgba(20,20,26,0.75); backdrop-filter: blur(6px);
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 18px; padding: 10px 20px; text-align: center;
-    pointer-events: auto;
+  video, canvas.frame{
+    position:absolute; inset:0; width:100%; height:100%; object-fit: cover;
   }
-  #countNum { font-size: 40px; font-weight: 800; line-height: 1; color: #4ade80; }
-  #countLabel { font-size: 12px; opacity: 0.7; margin-top: 2px; letter-spacing: 0.5px; }
+  #video{ visibility: visible; }
+  #overlay{ position:absolute; inset:0; width:100%; height:100%; }
 
-  #status {
-    background: rgba(20,20,26,0.75); backdrop-filter: blur(6px);
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 12px; padding: 8px 12px; font-size: 12px;
-    max-width: 46%; pointer-events: auto;
+  #hint{
+    position:absolute; left:0; right:0; top:12px;
+    display:flex; justify-content:center; pointer-events:none;
+    padding: 0 16px;
+  }
+  #hint span{
+    background: rgba(14,21,18,0.82);
+    border: 1px solid var(--line);
+    color: var(--text);
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-size: 13.5px;
+    text-align:center;
+    max-width: 92%;
+  }
+  #hint{ flex-direction: column; gap: 6px; }
+  #trendChip{
+    align-self:center;
+    background: rgba(217,164,65,0.16);
+    border: 1px solid rgba(217,164,65,0.5);
+    color: var(--amber);
+    padding: 5px 12px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    display: none;
   }
 
-  #bottomBar {
-    position: fixed; bottom: 0; left: 0; right: 0;
-    padding: 14px 14px calc(env(safe-area-inset-bottom, 0px) + 14px) 14px;
-    display: flex; flex-direction: column; gap: 10px;
-    background: linear-gradient(to top, rgba(0,0,0,0.85), transparent);
-    z-index: 10;
+  #startOverlay{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    flex-direction:column; gap: 14px; background: #0b100e; padding: 24px; text-align:center;
   }
-  .row { display: flex; align-items: center; gap: 10px; }
-  #sliderRow { color: #ddd; font-size: 13px; }
-  #confVal { min-width: 34px; text-align: right; }
-  input[type=range] { flex: 1; accent-color: #4ade80; }
+  #startOverlay p{ color: var(--dim); font-size: 14px; max-width: 320px; line-height:1.5; margin:0; }
+  #startOverlay .mark{ font-size: 38px; }
 
-  .controls { display: flex; gap: 10px; }
-  button {
-    flex: 1; padding: 14px; border: none; border-radius: 14px;
-    font-size: 16px; font-weight: 700; cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
+  .btn{
+    appearance:none; border: 1px solid var(--line); background: var(--panel-2);
+    color: var(--text); padding: 11px 18px; border-radius: 10px; font-size: 15px;
+    font-weight: 600; display:inline-flex; align-items:center; gap:8px; cursor:pointer;
   }
-  #startBtn { background: #4ade80; color: #06210f; }
-  #startBtn.stop { background: #f87171; color: #2a0a0a; }
-  #resetBtn { background: rgba(255,255,255,0.12); color: #fff; flex: 0 0 90px; }
-  #switchBtn { background: rgba(255,255,255,0.12); color: #fff; flex: 0 0 90px; }
-  #farModeBtn {
-    width: 100%; background: rgba(255,255,255,0.12); color: #ddd;
-    font-size: 14px; padding: 11px;
-  }
-  #farModeBtn.active { background: #38bdf8; color: #04202e; }
+  .btn:active{ transform: scale(0.97); }
+  .btn.primary{ background: var(--amber); color:#1a1200; border-color: var(--amber); }
+  .btn.ghost{ background: transparent; }
+  .btn.danger{ color: var(--red); }
+  .btn[disabled]{ opacity: 0.35; pointer-events:none; }
 
-  #loadingScreen {
-    position: absolute; inset: 0; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; gap: 14px; z-index: 20;
-    background: #0b0b0f;
+  #toolbar{
+    background: var(--panel);
+    border-top: 1px solid var(--line);
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    display:flex; flex-direction:column; gap:10px;
   }
-  .spinner {
-    width: 44px; height: 44px; border-radius: 50%;
-    border: 4px solid rgba(255,255,255,0.15); border-top-color: #4ade80;
-    animation: spin 0.9s linear infinite;
+  #rowSummary{
+    display:flex; gap:8px; overflow-x:auto; padding-bottom:2px;
   }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  #loadingText { font-size: 14px; opacity: 0.8; }
-  #hidden { display: none !important; }
+  .chip{
+    flex: 0 0 auto;
+    display:flex; align-items:center; gap:6px;
+    background: var(--panel-2); border:1px solid var(--line); border-radius: 999px;
+    padding: 6px 10px; font-size: 13px; color: var(--dim);
+  }
+  .chip .dot{ width:8px; height:8px; border-radius:50%; }
+  .chip b{ color: var(--text); }
 
-  #errorBox {
-    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-    padding: 24px; text-align: center; z-index: 25; background: #0b0b0f;
+  #actions{ display:flex; align-items:center; gap:8px; justify-content:space-between; }
+  #actions .group{ display:flex; gap:8px; }
+
+  .adjust{
+    display:flex; align-items:center; gap:10px; background:var(--panel-2);
+    border:1px solid var(--line); border-radius: 10px; padding: 4px 4px;
+  }
+  .adjust button{
+    width:34px; height:34px; border-radius:8px; border:none; background:var(--panel);
+    color:var(--text); font-size:18px; font-weight:700; cursor:pointer;
+  }
+  .adjust .n{ min-width: 26px; text-align:center; font-weight:700; font-size:15px; }
+
+  #camSwitch{ position:absolute; right:12px; top:12px; }
+  #camSwitch .btn{ padding: 9px 11px; border-radius: 10px; }
+
+  footer{
+    text-align:center; font-size: 11px; color: var(--dim); padding: 6px 0 4px; background: var(--panel);
+  }
+
+  @media (min-width: 720px){
+    #app{ max-width: 480px; margin: 0 auto; height:100dvh; box-shadow: 0 0 0 1px var(--line); }
   }
 </style>
 </head>
 <body>
 <div id="app">
-  <video id="video" playsinline autoplay muted></video>
-  <canvas id="overlay"></canvas>
+  <header>
+    <div class="title">นับขวด</div>
+    <div class="total">รวมทั้งหมด <b id="totalCount">0</b> ขวด</div>
+  </header>
 
-  <div id="topBar">
-    <div id="countBadge">
-      <div id="countNum">0</div>
-      <div id="countLabel">ขวดในเฟรม</div>
+  <div id="stage">
+    <video id="video" playsinline muted autoplay></video>
+    <canvas id="overlay"></canvas>
+
+    <div id="camSwitch">
+      <button class="btn ghost" id="switchBtn" title="สลับกล้อง">↺</button>
     </div>
-    <div id="status">กำลังโหลดโมเดล...</div>
+
+    <div id="hint">
+      <span id="hintText">แตะ "เริ่มกล้อง" เพื่อเปิดกล้อง</span>
+      <span id="trendChip"></span>
+    </div>
+
+    <div id="startOverlay">
+      <div class="mark">🍾</div>
+      <p>เล็งกล้องมองลงบนแถวขวด (เห็นฝาขวด) แล้วถ่ายภาพนิ่งหนึ่งภาพ<br/>จากนั้นแตะฝาขวดที่ 1, 2 และ 3 ตามลำดับ เพื่อให้แอปตรวจจับแนวโน้มมุมเอียง แล้วแตะขวดสุดท้ายของแถวเพื่อประมาณจำนวนทั้งหมด</p>
+      <button class="btn primary" id="startBtn">เริ่มกล้อง</button>
+    </div>
   </div>
 
-  <div id="bottomBar">
-    <div class="row" id="sliderRow">
-      <span>ความมั่นใจ</span>
-      <input type="range" id="confSlider" min="0.2" max="0.9" step="0.05" value="0.5">
-      <span id="confVal">50%</span>
-    </div>
-    <button id="farModeBtn">🔍 โหมดไกล/ของเยอะ (ช้าลงแต่แม่นขึ้น)</button>
-    <div class="controls">
-      <button id="switchBtn">🔄 กล้อง</button>
-      <button id="startBtn">▶️ เริ่มนับ</button>
-      <button id="resetBtn">รีเซ็ต</button>
+  <div id="toolbar">
+    <div id="rowSummary"></div>
+
+    <div id="actions">
+      <div class="group">
+        <button class="btn ghost" id="undoBtn" disabled>ย้อนกลับ</button>
+        <button class="btn danger ghost" id="resetBtn" disabled>เริ่มใหม่</button>
+      </div>
+      <div class="group" id="reviewGroup" style="display:none;">
+        <div class="adjust">
+          <button id="minusBtn">−</button>
+          <span class="n" id="adjN">0</span>
+          <button id="plusBtn">+</button>
+        </div>
+        <button class="btn primary" id="addRowBtn">ยืนยันแถวนี้</button>
+      </div>
+      <div class="group" id="captureGroup" style="display:none;">
+        <button class="btn primary" id="captureBtn">ถ่ายภาพ</button>
+      </div>
+      <div class="group" id="retakeGroup" style="display:none;">
+        <button class="btn ghost" id="retakeBtn">ถ่ายใหม่</button>
+        <button class="btn primary" id="addAnotherRowBtn">เพิ่มแถวใหม่</button>
+      </div>
     </div>
   </div>
 
-  <div id="loadingScreen">
-    <div class="spinner"></div>
-    <div id="loadingText">กำลังโหลดโมเดลตรวจจับวัตถุ...</div>
-  </div>
-
-  <div id="errorBox" class="hidden" style="display:none;"></div>
+  <footer>แตะเพื่อวางจุดอ้างอิง — ผลลัพธ์เป็นค่าประมาณ ปรับจำนวนด้วยปุ่ม +/− ได้</footer>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0/dist/tf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
 <script>
-const video = document.getElementById('video');
-const overlay = document.getElementById('overlay');
-const ctx = overlay.getContext('2d');
-const countNum = document.getElementById('countNum');
-const statusEl = document.getElementById('status');
-const startBtn = document.getElementById('startBtn');
-const resetBtn = document.getElementById('resetBtn');
-const switchBtn = document.getElementById('switchBtn');
-const confSlider = document.getElementById('confSlider');
-const confVal = document.getElementById('confVal');
-const loadingScreen = document.getElementById('loadingScreen');
-const loadingText = document.getElementById('loadingText');
-const errorBox = document.getElementById('errorBox');
+(() => {
+  const video = document.getElementById('video');
+  const overlay = document.getElementById('overlay');
+  const octx = overlay.getContext('2d');
+  const stage = document.getElementById('stage');
+  const hintText = document.getElementById('hintText');
+  const startOverlay = document.getElementById('startOverlay');
+  const startBtn = document.getElementById('startBtn');
+  const switchBtn = document.getElementById('switchBtn');
+  const captureBtn = document.getElementById('captureBtn');
+  const retakeBtn = document.getElementById('retakeBtn');
+  const addAnotherRowBtn = document.getElementById('addAnotherRowBtn');
+  const addRowBtn = document.getElementById('addRowBtn');
+  const undoBtn = document.getElementById('undoBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const minusBtn = document.getElementById('minusBtn');
+  const plusBtn = document.getElementById('plusBtn');
+  const adjN = document.getElementById('adjN');
+  const totalCountEl = document.getElementById('totalCount');
+  const rowSummary = document.getElementById('rowSummary');
+  const trendChip = document.getElementById('trendChip');
 
-let model = null;
-let running = false;
-let rafId = null;
-let timeoutId = null;
-let currentStream = null;
-let facingMode = 'environment';
-let confThreshold = 0.5;
-let maxCountThisSession = 0;
-let farMode = false;
+  const captureGroup = document.getElementById('captureGroup');
+  const retakeGroup = document.getElementById('retakeGroup');
+  const reviewGroup = document.getElementById('reviewGroup');
 
-const farModeBtn = document.getElementById('farModeBtn');
-const tileCanvas = document.createElement('canvas');
-const tileCtx = tileCanvas.getContext('2d');
+  const ROW_COLORS = ['#5bb98c', '#4aa3d9', '#d9a441', '#c07ad9', '#d9645b'];
 
-// Classes we treat as "bottle-like". COCO-SSD only has "bottle" and "wine glass";
-// we count "bottle" primarily.
-const TARGET_CLASSES = ['bottle'];
+  let stream = null;
+  let facingMode = 'environment';
+  let frozen = null; // offscreen canvas holding the still frame, pixel-space
+  let dpr = window.devicePixelRatio || 1;
 
-confSlider.addEventListener('input', () => {
-  confThreshold = parseFloat(confSlider.value);
-  confVal.textContent = Math.round(confThreshold * 100) + '%';
-});
-
-function showError(msg) {
-  loadingScreen.style.display = 'none';
-  errorBox.style.display = 'flex';
-  errorBox.textContent = msg;
-}
-
-async function startCamera() {
-  if (currentStream) {
-    currentStream.getTracks().forEach(t => t.stop());
+  // App state machine: 'live' | 'frozen-p1' | 'frozen-p2' | 'frozen-p3' | 'frozen-end' | 'review'
+  let mode = 'idle';
+  let rows = []; // { points:[{x,y}], count, colorIdx }
+  function blankCurrent() {
+    return {
+      p1: null, p2: null, p3: null, end: null,
+      dir: null,      // unit direction of the row, from p1 -> p3
+      d1: 0, d2: 0,   // projected distances of p2, p3 from p1 along dir
+      a: 0, c: 0, linear: true, // fitted model s(i) = a*i/(c*i+1) (or a*i if linear)
+      count: 0, points: []
+    };
   }
-  try {
-    currentStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: facingMode }, width: { ideal: 1920 }, height: { ideal: 1080 } },
-      audio: false
-    });
-    video.srcObject = currentStream;
-    await new Promise(res => { video.onloadedmetadata = () => { video.play(); res(); }; });
-    resizeCanvas();
-  } catch (err) {
-    showError('เปิดกล้องไม่ได้: ' + err.message + '\n\nโปรดอนุญาตการใช้กล้อง และเปิดหน้านี้ผ่าน HTTPS');
+  let current = blankCurrent();
+
+  function fitCanvasToStage() {
+    const rect = stage.getBoundingClientRect();
+    overlay.width = Math.round(rect.width * dpr);
+    overlay.height = Math.round(rect.height * dpr);
+    overlay.style.width = rect.width + 'px';
+    overlay.style.height = rect.height + 'px';
   }
-}
+  window.addEventListener('resize', () => { fitCanvasToStage(); render(); });
 
-function resizeCanvas() {
-  overlay.width = video.videoWidth || window.innerWidth;
-  overlay.height = video.videoHeight || window.innerHeight;
-}
-
-async function loadModel() {
-  loadingText.textContent = 'กำลังโหลดโมเดลตรวจจับวัตถุ...';
-  model = await cocoSsd.load({ base: 'mobilenet_v2' });
-  loadingScreen.style.display = 'none';
-  statusEl.textContent = 'พร้อมแล้ว กด "เริ่มนับ"';
-}
-
-function drawDetections(predictions) {
-  ctx.clearRect(0, 0, overlay.width, overlay.height);
-  let count = 0;
-  predictions.forEach(pred => {
-    if (!TARGET_CLASSES.includes(pred.class) || pred.score < confThreshold) return;
-    count++;
-    const [x, y, w, h] = pred.bbox;
-    ctx.strokeStyle = '#4ade80';
-    ctx.lineWidth = 3;
-    ctx.strokeRect(x, y, w, h);
-    const label = `ขวด ${Math.round(pred.score * 100)}%`;
-    ctx.font = 'bold 16px sans-serif';
-    const textW = ctx.measureText(label).width;
-    ctx.fillStyle = 'rgba(74, 222, 128, 0.9)';
-    ctx.fillRect(x, y > 22 ? y - 22 : y, textW + 10, 22);
-    ctx.fillStyle = '#06210f';
-    ctx.fillText(label, x + 5, y > 22 ? y - 6 : y + 16);
-  });
-  countNum.textContent = count;
-  if (count > maxCountThisSession) maxCountThisSession = count;
-  return count;
-}
-
-function iou(a, b) {
-  const [ax, ay, aw, ah] = a; const [bx, by, bw, bh] = b;
-  const x1 = Math.max(ax, bx), y1 = Math.max(ay, by);
-  const x2 = Math.min(ax + aw, bx + bw), y2 = Math.min(ay + ah, by + bh);
-  const interW = Math.max(0, x2 - x1), interH = Math.max(0, y2 - y1);
-  const inter = interW * interH;
-  const union = aw * ah + bw * bh - inter;
-  return union <= 0 ? 0 : inter / union;
-}
-
-function mergeOverlaps(preds) {
-  const kept = [];
-  preds.sort((a, b) => b.score - a.score);
-  for (const p of preds) {
-    if (!kept.some(k => k.class === p.class && iou(k.bbox, p.bbox) > 0.35)) {
-      kept.push(p);
+  async function startCamera() {
+    try {
+      if (stream) stream.getTracks().forEach(t => t.stop());
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: facingMode }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false
+      });
+      video.srcObject = stream;
+      await video.play();
+      startOverlay.style.display = 'none';
+      fitCanvasToStage();
+      mode = 'live';
+      captureGroup.style.display = 'flex';
+      retakeGroup.style.display = 'none';
+      reviewGroup.style.display = 'none';
+      hintText.textContent = 'จัดกล้องให้เห็นแถวขวดชัดเจน แล้วกด "ถ่ายภาพ"';
+      resetBtn.disabled = true;
+      undoBtn.disabled = true;
+    } catch (err) {
+      hintText.textContent = 'เปิดกล้องไม่สำเร็จ: ' + err.message;
     }
   }
-  return kept;
-}
 
-// Splits the current video frame into a grid of overlapping tiles and runs
-// detection on each tile separately at native resolution. Because each tile
-// covers less area, distant/small bottles appear proportionally larger to
-// the model, which greatly improves detection at range and in dense scenes.
-async function detectTiled(rows, cols) {
-  const vw = video.videoWidth, vh = video.videoHeight;
-  if (!vw || !vh) return [];
-  const overlap = 0.15;
-  const tileW = vw / cols, tileH = vh / rows;
-  const results = [];
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const sx = Math.max(0, c * tileW - tileW * overlap / 2);
-      const sy = Math.max(0, r * tileH - tileH * overlap / 2);
-      const sw = Math.min(vw - sx, tileW * (1 + overlap));
-      const sh = Math.min(vh - sy, tileH * (1 + overlap));
-      tileCanvas.width = sw;
-      tileCanvas.height = sh;
-      tileCtx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
-      const preds = await model.detect(tileCanvas);
-      preds.forEach(p => {
-        results.push({
-          class: p.class,
-          score: p.score,
-          bbox: [p.bbox[0] + sx, p.bbox[1] + sy, p.bbox[2], p.bbox[3]]
-        });
+  function stopVideoTrackOnly() {
+    // keep stream object but pause rendering; we already drew the still frame
+  }
+
+  function capturePhoto() {
+    const rect = stage.getBoundingClientRect();
+    const w = Math.round(rect.width * dpr);
+    const h = Math.round(rect.height * dpr);
+    frozen = document.createElement('canvas');
+    frozen.width = w; frozen.height = h;
+    const fctx = frozen.getContext('2d');
+
+    // object-fit: cover mapping from video native size to stage rect
+    const vw = video.videoWidth, vh = video.videoHeight;
+    const stageRatio = w / h;
+    const vidRatio = vw / vh;
+    let sx, sy, sw, sh;
+    if (vidRatio > stageRatio) {
+      sh = vh; sw = vh * stageRatio; sx = (vw - sw) / 2; sy = 0;
+    } else {
+      sw = vw; sh = vw / stageRatio; sx = 0; sy = (vh - sh) / 2;
+    }
+    fctx.drawImage(video, sx, sy, sw, sh, 0, 0, w, h);
+
+    fitCanvasToStage();
+    mode = 'frozen-p1';
+    captureGroup.style.display = 'none';
+    retakeGroup.style.display = 'flex';
+    reviewGroup.style.display = 'none';
+    hintText.textContent = 'แตะจุดกึ่งกลางฝาขวดที่ 1 (ต้นแถว)';
+    resetBtn.disabled = false;
+    render();
+  }
+
+  function retake() {
+    rows = [];
+    resetCurrent();
+    frozen = null;
+    mode = 'live';
+    captureGroup.style.display = 'flex';
+    retakeGroup.style.display = 'none';
+    reviewGroup.style.display = 'none';
+    hintText.textContent = 'จัดกล้องให้เห็นแถวขวดชัดเจน แล้วกด "ถ่ายภาพ"';
+    resetBtn.disabled = true;
+    undoBtn.disabled = true;
+    updateRowSummary();
+    render();
+  }
+
+  function resetCurrent() {
+    current = blankCurrent();
+    trendChip.style.display = 'none';
+  }
+
+  function startNewRow() {
+    resetCurrent();
+    mode = 'frozen-p1';
+    retakeGroup.style.display = 'flex';
+    reviewGroup.style.display = 'none';
+    hintText.textContent = 'แตะฝาขวดที่ 1 (ต้นแถวใหม่)';
+    render();
+  }
+
+  function dist(a, b) { return Math.hypot(b.x - a.x, b.y - a.y); }
+  function normalize(v) { const m = Math.hypot(v.x, v.y) || 1; return { x: v.x / m, y: v.y / m }; }
+  function dot(v, w) { return v.x * w.x + v.y * w.y; }
+
+  function canvasPointFromEvent(e) {
+    const rect = overlay.getBoundingClientRect();
+    const clientX = (e.touches ? e.touches[0].clientX : e.clientX);
+    const clientY = (e.touches ? e.touches[0].clientY : e.clientY);
+    const x = (clientX - rect.left) * dpr;
+    const y = (clientY - rect.top) * dpr;
+    return { x, y };
+  }
+
+  function handleTap(e) {
+    if (!frozen) return;
+    if (mode !== 'frozen-p1' && mode !== 'frozen-p2' && mode !== 'frozen-p3' && mode !== 'frozen-end') return;
+    e.preventDefault();
+    const p = canvasPointFromEvent(e);
+
+    if (mode === 'frozen-p1') {
+      current.p1 = p;
+      mode = 'frozen-p2';
+      hintText.textContent = 'แตะฝาขวดที่ 2 (ขวดถัดไปในแถวเดียวกัน)';
+      undoBtn.disabled = false;
+    } else if (mode === 'frozen-p2') {
+      current.p2 = p;
+      mode = 'frozen-p3';
+      hintText.textContent = 'แตะฝาขวดที่ 3 (ขวดถัดไปอีกหนึ่ง) — ใช้ 3 จุดนี้ตรวจแนวโน้มมุมเอียง';
+    } else if (mode === 'frozen-p3') {
+      current.p3 = p;
+      computeModel();
+      mode = 'frozen-end';
+      hintText.textContent = 'แตะ/ลากไปยังขวดสุดท้ายของแถวนี้';
+      showTrend();
+    } else if (mode === 'frozen-end') {
+      current.end = p;
+      computeRowPoints();
+      mode = 'review';
+      hintText.textContent = 'ตรวจสอบจำนวน ปรับด้วย +/− แล้วกด "ยืนยันแถวนี้"';
+      reviewGroup.style.display = 'flex';
+      retakeGroup.style.display = 'none';
+      adjN.textContent = current.count;
+    }
+    render();
+  }
+
+  // Fit a projective (Möbius) model along the row direction from 3 taps.
+  // For points equally spaced in 3D along a straight line, their perspective
+  // projection onto the image line follows s(i) = a*i / (c*i + 1), where i is
+  // the bottle index (0,1,2,...) and s is signed pixel-distance from p1.
+  // This lets three taps reveal whether spacing is shrinking/growing (tilt)
+  // and lets us extrapolate the rest of the row accordingly.
+  function computeModel() {
+    current.dir = normalize({ x: current.p3.x - current.p1.x, y: current.p3.y - current.p1.y });
+    const d1 = dot({ x: current.p2.x - current.p1.x, y: current.p2.y - current.p1.y }, current.dir);
+    const d2 = dot({ x: current.p3.x - current.p1.x, y: current.p3.y - current.p1.y }, current.dir);
+    current.d1 = d1; current.d2 = d2;
+
+    const denom = 2 * (d1 - d2);
+    if (Math.abs(denom) < 1e-3 || d1 <= 0) {
+      // degenerate / effectively no perspective change -> linear model
+      current.linear = true;
+      current.a = d1 > 0 ? d1 : Math.max(d2 / 2, 1);
+      current.c = 0;
+    } else {
+      const c = (d2 - 2 * d1) / denom;
+      const a = d1 * (c + 1);
+      if (!isFinite(c) || !isFinite(a) || a <= 0) {
+        current.linear = true;
+        current.a = d1;
+        current.c = 0;
+      } else {
+        current.linear = false;
+        current.a = a;
+        current.c = c;
+      }
+    }
+  }
+
+  function sAt(i) {
+    if (current.linear) return current.a * i;
+    return (current.a * i) / (current.c * i + 1);
+  }
+
+  function showTrend() {
+    const d1 = current.d1, d2 = current.d2;
+    const secondGap = d2 - d1;
+    if (d1 <= 0 || secondGap <= 0) {
+      trendChip.style.display = 'none';
+      return;
+    }
+    const pct = Math.round((1 - secondGap / d1) * 100);
+    if (Math.abs(pct) < 4) {
+      trendChip.textContent = 'ระยะห่างสม่ำเสมอ — แถวเกือบตั้งฉากกับกล้อง';
+    } else if (pct > 0) {
+      trendChip.textContent = `ตรวจพบมุมเอียง: ระยะห่างลดลง ~${pct}% ต่อขวดที่ไกลออกไป`;
+    } else {
+      trendChip.textContent = `ตรวจพบมุมเอียง: ระยะห่างเพิ่มขึ้น ~${Math.abs(pct)}% ต่อขวดที่ไกลออกไป`;
+    }
+    trendChip.style.display = 'block';
+  }
+
+  // allow dragging the "end" point before it's finalized, for smoother placement
+  let dragging = false;
+  overlay.addEventListener('pointerdown', (e) => {
+    if (mode === 'frozen-end') {
+      dragging = true;
+      current.end = canvasPointFromEvent(e);
+      computeRowPoints();
+      render();
+    } else {
+      handleTap(e);
+    }
+  });
+  overlay.addEventListener('pointermove', (e) => {
+    if (dragging && mode === 'frozen-end') {
+      current.end = canvasPointFromEvent(e);
+      computeRowPoints();
+      render();
+    }
+  });
+  overlay.addEventListener('pointerup', (e) => {
+    if (dragging && mode === 'frozen-end') {
+      dragging = false;
+      current.end = canvasPointFromEvent(e);
+      computeRowPoints();
+      mode = 'review';
+      hintText.textContent = 'ตรวจสอบจำนวน ปรับด้วย +/− แล้วกด "ยืนยันแถวนี้"';
+      reviewGroup.style.display = 'flex';
+      retakeGroup.style.display = 'none';
+      adjN.textContent = current.count;
+      render();
+    }
+  });
+
+  function computeRowPoints() {
+    if (!current.p1 || !current.dir || !current.a) return;
+    const sEnd = dot({ x: current.end.x - current.p1.x, y: current.end.y - current.p1.y }, current.dir);
+
+    let iEnd;
+    if (current.linear) {
+      iEnd = sEnd / current.a;
+    } else {
+      const denom = current.a - sEnd * current.c;
+      iEnd = Math.abs(denom) < 1e-6 ? sEnd / current.a : sEnd / denom;
+    }
+
+    let n = Math.round(iEnd) + 1;
+    n = Math.max(1, Math.min(500, n));
+    current.count = n;
+    rebuildPoints();
+  }
+
+  function rebuildPoints() {
+    const pts = [];
+    for (let i = 0; i < current.count; i++) {
+      const s = sAt(i);
+      pts.push({
+        x: current.p1.x + current.dir.x * s,
+        y: current.p1.y + current.dir.y * s
       });
     }
+    current.points = pts;
   }
-  return mergeOverlaps(results);
-}
 
-async function detectLoop() {
-  if (!running) return;
-  if (video.readyState >= 2) {
-    const predictions = await model.detect(video);
-    drawDetections(predictions);
+  function adjustCount(delta) {
+    if (mode !== 'review') return;
+    current.count = Math.max(1, Math.min(500, current.count + delta));
+    rebuildPoints();
+    adjN.textContent = current.count;
+    render();
   }
-  rafId = requestAnimationFrame(detectLoop);
-}
 
-async function detectLoopFar() {
-  if (!running) return;
-  if (video.readyState >= 2) {
-    statusEl.textContent = 'กำลังสแกนละเอียด...';
-    const predictions = await detectTiled(2, 3);
-    drawDetections(predictions);
-    if (running) statusEl.textContent = 'โหมดไกล: กำลังตรวจจับ...';
+  function confirmRow() {
+    rows.push({
+      points: current.points,
+      count: current.count,
+      colorIdx: rows.length % ROW_COLORS.length
+    });
+    updateRowSummary();
+    startNewRow();
   }
-  timeoutId = setTimeout(detectLoopFar, 150);
-}
 
-farModeBtn.addEventListener('click', () => {
-  farMode = !farMode;
-  farModeBtn.classList.toggle('active', farMode);
-  farModeBtn.textContent = farMode
-    ? '🔍 โหมดไกล/ของเยอะ (เปิดอยู่)'
-    : '🔍 โหมดไกล/ของเยอะ (ช้าลงแต่แม่นขึ้น)';
-  if (running) {
-    if (rafId) cancelAnimationFrame(rafId);
-    if (timeoutId) clearTimeout(timeoutId);
-    if (farMode) { detectLoopFar(); } else { detectLoop(); }
+  function undo() {
+    if (mode === 'frozen-p2') {
+      current.p1 = null; mode = 'frozen-p1';
+      hintText.textContent = 'แตะฝาขวดที่ 1 (ต้นแถว)';
+      undoBtn.disabled = true;
+    } else if (mode === 'frozen-p3') {
+      current.p2 = null; mode = 'frozen-p2';
+      hintText.textContent = 'แตะฝาขวดที่ 2 (ขวดถัดไปในแถวเดียวกัน)';
+    } else if (mode === 'frozen-end') {
+      current.p3 = null; current.dir = null; current.a = 0; current.c = 0; mode = 'frozen-p3';
+      trendChip.style.display = 'none';
+      hintText.textContent = 'แตะฝาขวดที่ 3 (ขวดถัดไปอีกหนึ่ง) — ใช้ 3 จุดนี้ตรวจแนวโน้มมุมเอียง';
+    } else if (mode === 'review') {
+      current.end = null; current.count = 0; current.points = []; mode = 'frozen-end';
+      hintText.textContent = 'แตะ/ลากไปยังขวดสุดท้ายของแถวนี้';
+      reviewGroup.style.display = 'none';
+      retakeGroup.style.display = 'flex';
+    }
+    render();
   }
-});
 
-startBtn.addEventListener('click', () => {
-  running = !running;
-  if (running) {
-    startBtn.textContent = '⏸️ หยุด';
-    startBtn.classList.add('stop');
-    statusEl.textContent = 'กำลังตรวจจับ...';
-    if (farMode) { detectLoopFar(); } else { detectLoop(); }
-  } else {
-    startBtn.textContent = '▶️ เริ่มนับ';
-    startBtn.classList.remove('stop');
-    statusEl.textContent = 'หยุดชั่วคราว';
-    if (rafId) cancelAnimationFrame(rafId);
-    if (timeoutId) clearTimeout(timeoutId);
+  function resetAll() {
+    rows = [];
+    resetCurrent();
+    frozen = null;
+    mode = 'live';
+    captureGroup.style.display = 'flex';
+    retakeGroup.style.display = 'none';
+    reviewGroup.style.display = 'none';
+    hintText.textContent = 'จัดกล้องให้เห็นแถวขวดชัดเจน แล้วกด "ถ่ายภาพ"';
+    resetBtn.disabled = true;
+    undoBtn.disabled = true;
+    updateRowSummary();
+    render();
   }
-});
 
-resetBtn.addEventListener('click', () => {
-  maxCountThisSession = 0;
-  countNum.textContent = '0';
-  ctx.clearRect(0, 0, overlay.width, overlay.height);
-});
-
-switchBtn.addEventListener('click', async () => {
-  facingMode = facingMode === 'environment' ? 'user' : 'environment';
-  await startCamera();
-});
-
-window.addEventListener('resize', resizeCanvas);
-
-(async function init() {
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    showError('เบราว์เซอร์นี้ไม่รองรับการเข้าถึงกล้อง (ต้องใช้ HTTPS และเบราว์เซอร์สมัยใหม่)');
-    return;
+  function updateRowSummary() {
+    rowSummary.innerHTML = '';
+    let total = 0;
+    rows.forEach((r, i) => {
+      total += r.count;
+      const chip = document.createElement('div');
+      chip.className = 'chip';
+      chip.innerHTML = `<span class="dot" style="background:${ROW_COLORS[r.colorIdx]}"></span>แถว ${i + 1}: <b>${r.count}</b>`;
+      rowSummary.appendChild(chip);
+    });
+    totalCountEl.textContent = total;
   }
-  await startCamera();
-  try {
-    await loadModel();
-  } catch (err) {
-    showError('โหลดโมเดลไม่สำเร็จ: ' + err.message);
+
+  function drawMarkers(ctx, points, color, showLine) {
+    if (showLine && points.length > 1) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2 * dpr;
+      ctx.setLineDash([6 * dpr, 6 * dpr]);
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    points.forEach((p, i) => {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 9 * dpr, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.85;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.lineWidth = 2 * dpr;
+      ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+      ctx.stroke();
+    });
   }
+
+  function render() {
+    octx.clearRect(0, 0, overlay.width, overlay.height);
+    if (frozen) octx.drawImage(frozen, 0, 0, overlay.width, overlay.height);
+
+    // finished rows
+    rows.forEach(r => drawMarkers(octx, r.points, ROW_COLORS[r.colorIdx], true));
+
+    // current in-progress row
+    const liveColor = ROW_COLORS[rows.length % ROW_COLORS.length];
+    const seedPts = [current.p1, current.p2, current.p3].filter(Boolean);
+    if (seedPts.length > 0 && !(current.points && current.points.length > 0)) {
+      drawMarkers(octx, seedPts, liveColor, false);
+      if (seedPts.length > 1) {
+        octx.strokeStyle = liveColor;
+        octx.lineWidth = 2 * dpr;
+        octx.setLineDash([4 * dpr, 4 * dpr]);
+        octx.beginPath();
+        octx.moveTo(seedPts[0].x, seedPts[0].y);
+        for (let i = 1; i < seedPts.length; i++) octx.lineTo(seedPts[i].x, seedPts[i].y);
+        octx.stroke();
+        octx.setLineDash([]);
+      }
+    }
+    if (current.points && current.points.length > 0 && (mode === 'frozen-end' || mode === 'review')) {
+      drawMarkers(octx, current.points, liveColor, true);
+    }
+  }
+
+  // wire up buttons
+  startBtn.addEventListener('click', startCamera);
+  switchBtn.addEventListener('click', () => {
+    facingMode = facingMode === 'environment' ? 'user' : 'environment';
+    if (mode === 'live') startCamera();
+  });
+  captureBtn.addEventListener('click', capturePhoto);
+  retakeBtn.addEventListener('click', retake);
+  addAnotherRowBtn.addEventListener('click', startNewRow);
+  addRowBtn.addEventListener('click', confirmRow);
+  undoBtn.addEventListener('click', undo);
+  resetBtn.addEventListener('click', resetAll);
+  minusBtn.addEventListener('click', () => adjustCount(-1));
+  plusBtn.addEventListener('click', () => adjustCount(1));
+
+  fitCanvasToStage();
 })();
 </script>
 </body>
