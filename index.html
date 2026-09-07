@@ -3,209 +3,246 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>ระบบนับขวดสุรา - Virtual Laser Line</title>
+  <title>ระบบนับขวดด้วย Smart Template</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    /* ป้องกันการคลุมดำ/ซูมหน้าจอเมื่อแตะบนมือถือ */
     body { touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+    /* แถบ Progress Bar แนวตั้ง */
+    .meter-container { height: 100%; width: 20px; background: #333; border-radius: 10px; overflow: hidden; position: relative; }
+    .meter-fill { position: absolute; bottom: 0; width: 100%; background: #22c55e; transition: height 0.1s, background-color 0.1s; }
+    .meter-threshold { position: absolute; width: 100%; height: 2px; background: red; z-index: 10; }
   </style>
 </head>
 <body class="bg-slate-900 text-white min-h-screen flex flex-col items-center justify-between p-4">
 
   <!-- Header -->
   <header class="text-center w-full max-w-sm my-2">
-    <h1 class="text-lg font-bold text-yellow-400">ระบบนับขวดด้วย Virtual Laser</h1>
-    <p class="text-xs text-slate-400">กวาดกล้องผ่านฝาขวด/สแตมป์เพื่อตรวจนับ</p>
+    <h1 class="text-lg font-bold text-blue-400">Smart Template Counter</h1>
+    <p class="text-xs text-slate-400">เล็งเป้า ล็อกวัตถุอ้างอิง แล้วกวาดกล้องนับ</p>
   </header>
 
   <!-- Container แสดงผลกล้อง -->
   <div class="relative w-full max-w-sm aspect-[3/4] bg-black rounded-2xl overflow-hidden border-2 border-slate-700 shadow-2xl flex items-center justify-center">
     <video id="webcam" autoplay playsinline muted class="w-full h-full object-cover"></video>
     
-    <!-- เส้น Laser จำลอง (Visual Indicator) -->
-    <div id="laser-line" class="absolute top-1/2 left-0 w-full h-[3px] bg-red-500 shadow-[0_0_12px_#f00] pointer-events-none transition-colors duration-150 z-10"></div>
-    
-    <!-- ข้อความแจ้งเตือนสถานะกล้อง -->
-    <div id="status-text" class="absolute text-sm text-slate-400 bg-black/60 px-3 py-1 rounded-full pointer-events-none z-20">
-      กำลังเชื่อมต่อกล้อง...
+    <!-- กรอบเป้าหมาย (Target Box) -->
+    <div id="target-box" class="absolute w-24 h-24 border-4 border-dashed border-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.5)] transition-colors duration-200 z-10 flex items-center justify-center">
+      <!-- จุดศูนย์กลาง -->
+      <div class="w-2 h-2 bg-yellow-400 rounded-full"></div>
+    </div>
+
+    <!-- แถบวัดความเหมือน (Similarity Meter) ด้านขวา -->
+    <div class="absolute right-4 top-1/4 h-1/2 flex flex-col items-center z-20">
+      <div class="text-[10px] font-bold mb-1">ความเหมือน</div>
+      <div class="meter-container border border-slate-600">
+        <div id="meter-threshold" class="meter-threshold" style="bottom: 70%;"></div>
+        <div id="meter-fill" class="meter-fill" style="height: 0%;"></div>
+      </div>
+      <div id="score-text" class="text-[10px] mt-1 font-mono">0%</div>
     </div>
   </div>
 
   <!-- แผงควบคุมและสรุปยอด -->
-  <div class="w-full max-w-sm bg-slate-800 p-4 rounded-xl shadow-lg border border-slate-700 space-y-3">
-    <div class="flex justify-between items-center">
+  <div class="w-full max-w-sm bg-slate-800 p-4 rounded-xl shadow-lg border border-slate-700 space-y-4">
+    
+    <div class="flex justify-between items-center bg-slate-900 p-3 rounded-lg border border-slate-700">
       <div>
         <span class="text-xs text-slate-400">ยอดตรวจนับปัจจุบัน</span>
         <div id="count-display" class="text-4xl font-extrabold text-green-400">0</div>
       </div>
-      <button id="reset-btn" class="bg-red-600 hover:bg-red-500 text-white text-xs px-4 py-2 rounded-lg font-semibold transition active:scale-95">
-        รีเซ็ตจำนวน
+      <button id="reset-btn" class="bg-slate-700 hover:bg-slate-600 text-white text-xs px-4 py-2 rounded-lg font-semibold transition">
+        รีเซ็ต
       </button>
     </div>
 
-    <!-- แผงปรับแต่งค่ากรองสีสแตมป์/ฝาขวด (HSV Threshold) -->
-    <div class="space-y-2 bg-slate-900/80 p-3 rounded-lg border border-slate-700/50">
-      <div class="flex justify-between items-center border-b border-slate-700 pb-1">
-        <span class="text-xs font-bold text-slate-300">ช่วงสีสแตมป์/ฝาขวด (Hue)</span>
-        <span id="hue-val" class="text-xs text-yellow-400 font-mono">0° - 30°</span>
-      </div>
-      
-      <div class="space-y-1">
-        <div class="flex justify-between text-[11px] text-slate-400">
-          <span>ค่าสีเริ่มต้น (Min)</span>
-        </div>
-        <input type="range" id="h-min" min="0" max="360" value="0" class="w-full accent-blue-500 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer">
-      </div>
+    <!-- ปุ่มควบคุมระบบ -->
+    <button id="lock-btn" class="w-full bg-yellow-500 hover:bg-yellow-400 text-slate-900 text-lg py-4 rounded-xl font-bold shadow-lg transition active:scale-95">
+      🔒 เล็งแล้วกดล็อกเป้าหมาย (Lock Target)
+    </button>
 
-      <div class="space-y-1">
-        <div class="flex justify-between text-[11px] text-slate-400">
-          <span>ค่าสีสิ้นสุด (Max)</span>
-        </div>
-        <input type="range" id="h-max" min="0" max="360" value="30" class="w-full accent-blue-500 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer">
-      </div>
+    <div class="text-[11px] text-slate-400 text-center">
+      สถานะ: <span id="status-text" class="font-bold text-yellow-400">กรุณาล็อกเป้าหมายก่อนสแกน</span>
     </div>
   </div>
 
   <script>
     const video = document.getElementById('webcam');
-    const laserLine = document.getElementById('laser-line');
-    const statusText = document.getElementById('status-text');
-    const countDisplay = document.getElementById('count-display');
+    const targetBox = document.getElementById('target-box');
+    const lockBtn = document.getElementById('lock-btn');
     const resetBtn = document.getElementById('reset-btn');
+    const countDisplay = document.getElementById('count-display');
+    const statusText = document.getElementById('status-text');
+    const meterFill = document.getElementById('meter-fill');
+    const scoreText = document.getElementById('score-text');
 
-    const hMinInput = document.getElementById('h-min');
-    const hMaxInput = document.getElementById('h-max');
-    const hueVal = document.getElementById('hue-val');
-
-    // สร้าง Offscreen Canvas เบาๆ เพื่อวิเคราะห์พิกเซลโดยเฉพาะ (ป้องกันหน้าจอหลัก Freeze)
     const offCanvas = document.createElement('canvas');
     const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
 
+    let isScanning = false;
+    let templateHistogram = null;
     let bottleCount = 0;
     let isObjectPresent = false;
-    let isProcessing = false;
+    const BOX_SIZE = 80; // ขนาดพื้นที่เป้าหมาย (พิกเซล)
+    const MATCH_THRESHOLD = 70; // ความเหมือนที่ถือว่าใช่ (%)
+    const RELEASE_THRESHOLD = 40; // ความเหมือนที่ถือว่าหลุดกรอบแล้ว (%)
 
-    // 1. เปิดใช้งานกล้องมือถือ
+    // เสียง ิBeep เวลานับ
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playBeep() {
+      if(audioCtx.state === 'suspended') audioCtx.resume();
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // เสียงแหลม
+      gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      oscillator.start();
+      setTimeout(() => oscillator.stop(), 100);
+    }
+
+    // 1. เปิดกล้อง
     async function initCamera() {
       try {
-        const constraints = {
-          video: {
-            facingMode: { ideal: 'environment' }, // ใช้กล้องหลัง
-            width: { ideal: 640 },
-            height: { ideal: 480 }
-          },
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 640 }, height: { ideal: 480 } },
           audio: false
-        };
-
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        });
         video.srcObject = stream;
-        
-        // บังคับสั่ง Play เพื่อป้องกันภาพค้างบน iOS/Android
         await video.play();
-        
-        statusText.classList.add('hidden');
-        
-        // กำหนดขนาด Offscreen Canvas ให้มีขนาดจิ๋วเฉพาะแนวเส้นสแกน
-        offCanvas.width = 160;  // ย่อความกว้างลงเหลือ 160px เพื่อให้สแกนได้เร็วมาก
-        offCanvas.height = 1;   // อ่านความสูงแค่ 1px ตรงกลาง
-        
+        offCanvas.width = BOX_SIZE;
+        offCanvas.height = BOX_SIZE;
         requestAnimationFrame(processLoop);
       } catch (err) {
-        statusText.innerText = 'ไม่สามารถเปิดกล้องได้: ' + err.message;
-        statusText.classList.add('text-red-400');
+        alert('ไม่สามารถเปิดกล้องได้');
       }
     }
 
-    // 2. แปลง RGB เป็น HSV โทนสี
-    function rgbToHue(r, g, b) {
-      r /= 255; g /= 255; b /= 255;
-      const max = Math.max(r, g, b), min = Math.min(r, g, b);
-      let h = 0;
-      const d = max - min;
-
-      if (d === 0) return 0;
-
-      switch (max) {
-        case r: h = (g - b) / d + (g < b ? 6 : 0); break;
-        case g: h = (b - r) / d + 2; break;
-        case b: h = (r - g) / d + 4; break;
+    // 2. คำนวณ Histogram (สร้างลายนิ้วมือภาพ)
+    // แบ่งสี RGB เป็น 64 กลุ่ม (4x4x4) เพื่อความรวดเร็วและทนทานต่อแสงที่เปลี่ยนไป
+    function getHistogram(imageData) {
+      let hist = new Array(64).fill(0);
+      let data = imageData.data;
+      let pixelCount = data.length / 4;
+      
+      for (let i = 0; i < data.length; i += 4) {
+        let r = Math.floor(data[i] / 64);   // ค่า 0-3
+        let g = Math.floor(data[i+1] / 64); // ค่า 0-3
+        let b = Math.floor(data[i+2] / 64); // ค่า 0-3
+        let index = (r << 4) | (g << 2) | b;
+        hist[index]++;
       }
-      return Math.round((h / 6) * 360);
+      
+      // แปลงเป็นเปอร์เซ็นต์สัดส่วน
+      return hist.map(val => val / pixelCount);
     }
 
-    // 3. Loop ประมวลผลภาพเบาๆ ไม่ดึงประสิทธิภาพเครื่อง
+    // 3. เปรียบเทียบความเหมือนของ Histogram 2 ตัว (Bhattacharyya/Intersection)
+    function compareHistograms(hist1, hist2) {
+      let score = 0;
+      for (let i = 0; i < hist1.length; i++) {
+        score += Math.min(hist1[i], hist2[i]); // ยิ่งพื้นที่ทับซ้อนกันมาก ยิ่งเหมือน
+      }
+      return Math.round(score * 100);
+    }
+
+    // 4. วงจรการประมวลผล (รันตลอดเวลา)
     function processLoop() {
-      if (video.readyState === video.HAVE_ENOUGH_DATA && !isProcessing) {
-        isProcessing = true;
-
-        // วาดเฉพาะแถบเส้นตรงกลางของกล้องลงบน Offscreen Canvas ขนาดจิ๋ว
-        const srcY = video.videoHeight / 2;
-        offCtx.drawImage(video, 0, srcY, video.videoWidth, 1, 0, 0, offCanvas.width, 1);
-
-        const imgData = offCtx.getImageData(0, 0, offCanvas.width, 1);
-        const pixels = imgData.data;
-
-        let matchedPixels = 0;
-        const minHue = parseInt(hMinInput.value);
-        const maxHue = parseInt(hMaxInput.value);
-
-        // วนลูปตรวจพิกเซลแบบสุ่มข้ามก้าวเพื่อความเร็วสูงสุด
-        for (let i = 0; i < pixels.length; i += 4) {
-          const r = pixels[i];
-          const g = pixels[i + 1];
-          const b = pixels[i + 2];
-
-          // กรองเบื้องต้น: ไม่ตรวจพื้นที่มืดเกินไป
-          if (r + g + b < 60) continue;
-
-          const hue = rgbToHue(r, g, b);
-
-          let isMatch = false;
-          if (minHue <= maxHue) {
-            isMatch = (hue >= minHue && hue <= maxHue);
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        
+        // ดึงภาพเฉพาะตรงกลางกรอบเป้าหมาย
+        const sx = (video.videoWidth / 2) - (BOX_SIZE / 2);
+        const sy = (video.videoHeight / 2) - (BOX_SIZE / 2);
+        
+        offCtx.drawImage(video, sx, sy, BOX_SIZE, BOX_SIZE, 0, 0, BOX_SIZE, BOX_SIZE);
+        const imgData = offCtx.getImageData(0, 0, BOX_SIZE, BOX_SIZE);
+        
+        if (isScanning && templateHistogram) {
+          const currentHistogram = getHistogram(imgData);
+          const matchScore = compareHistograms(templateHistogram, currentHistogram);
+          
+          // อัปเดต UI แถบวัดความเหมือน
+          meterFill.style.height = `${matchScore}%`;
+          scoreText.innerText = `${matchScore}%`;
+          
+          if (matchScore >= MATCH_THRESHOLD) {
+            meterFill.style.backgroundColor = '#22c55e'; // สีเขียว
           } else {
-            isMatch = (hue >= minHue || hue <= maxHue); // กรณีวนขอบรอบ 360°
+            meterFill.style.backgroundColor = '#eab308'; // สีเหลือง
           }
 
-          if (isMatch) {
-            matchedPixels++;
+          // กลไกการนับ (Peak Detection)
+          if (matchScore >= MATCH_THRESHOLD && !isObjectPresent) {
+            // วัตถุเข้ามาในกรอบแล้ว
+            isObjectPresent = true;
+            targetBox.classList.replace('border-blue-500', 'border-green-500');
+            targetBox.style.backgroundColor = 'rgba(34, 197, 94, 0.2)';
+            
+          } else if (matchScore <= RELEASE_THRESHOLD && isObjectPresent) {
+            // วัตถุผ่านพ้นกรอบไปแล้ว ให้นับ +1
+            isObjectPresent = false;
+            bottleCount++;
+            countDisplay.innerText = bottleCount;
+            playBeep();
+            
+            targetBox.classList.replace('border-green-500', 'border-blue-500');
+            targetBox.style.backgroundColor = 'transparent';
           }
         }
-
-        // หากมีพิกเซลสีที่ตรงเงื่อนไขเกิน 15% ของเส้นสแกน
-        const targetDetected = matchedPixels > (offCanvas.width * 0.15);
-
-        // State Machine ตรวจจับจังหวะ "เข้า" และ "ออก" เพื่อบันทึกการนับ +1
-        if (targetDetected && !isObjectPresent) {
-          isObjectPresent = true;
-          laserLine.className = 'absolute top-1/2 left-0 w-full h-[3px] bg-green-400 shadow-[0_0_15px_#0f0] pointer-events-none transition-colors duration-150 z-10';
-        } else if (!targetDetected && isObjectPresent) {
-          isObjectPresent = false;
-          bottleCount++;
-          countDisplay.innerText = bottleCount;
-          laserLine.className = 'absolute top-1/2 left-0 w-full h-[3px] bg-red-500 shadow-[0_0_12px_#f00] pointer-events-none transition-colors duration-150 z-10';
-        }
-
-        isProcessing = false;
       }
-
       requestAnimationFrame(processLoop);
     }
 
-    // Update UI และ Event Listener
-    function updateHueLabel() {
-      hueVal.innerText = `${hMinInput.value}° - ${hMaxInput.value}°`;
-    }
-
-    hMinInput.addEventListener('input', updateHueLabel);
-    hMaxInput.addEventListener('input', updateHueLabel);
+    // 5. จัดการปุ่มกดล็อกเป้าหมาย
+    lockBtn.addEventListener('click', () => {
+      if (!isScanning) {
+        // ทำการล็อกเป้าหมาย
+        const sx = (video.videoWidth / 2) - (BOX_SIZE / 2);
+        const sy = (video.videoHeight / 2) - (BOX_SIZE / 2);
+        offCtx.drawImage(video, sx, sy, BOX_SIZE, BOX_SIZE, 0, 0, BOX_SIZE, BOX_SIZE);
+        const imgData = offCtx.getImageData(0, 0, BOX_SIZE, BOX_SIZE);
+        
+        templateHistogram = getHistogram(imgData);
+        isScanning = true;
+        
+        // ปรับ UI
+        lockBtn.innerHTML = '🛑 ยกเลิกการล็อกเป้าหมาย';
+        lockBtn.classList.replace('bg-yellow-500', 'bg-red-500');
+        lockBtn.classList.replace('hover:bg-yellow-400', 'hover:bg-red-400');
+        lockBtn.classList.replace('text-slate-900', 'text-white');
+        
+        targetBox.classList.replace('border-yellow-400', 'border-blue-500');
+        statusText.innerHTML = 'กำลังสแกน... <span class="text-white">เลื่อนกล้องเพื่อนับขวดถัดไปได้เลย</span>';
+        statusText.classList.replace('text-yellow-400', 'text-blue-400');
+        playBeep();
+      } else {
+        // ยกเลิกการล็อก
+        isScanning = false;
+        templateHistogram = null;
+        isObjectPresent = false;
+        
+        lockBtn.innerHTML = '🔒 เล็งแล้วกดล็อกเป้าหมาย (Lock Target)';
+        lockBtn.classList.replace('bg-red-500', 'bg-yellow-500');
+        lockBtn.classList.replace('hover:bg-red-400', 'hover:bg-yellow-400');
+        lockBtn.classList.replace('text-white', 'text-slate-900');
+        
+        targetBox.classList.remove('border-blue-500', 'border-green-500');
+        targetBox.classList.add('border-yellow-400');
+        targetBox.style.backgroundColor = 'transparent';
+        
+        statusText.innerHTML = 'กรุณาล็อกเป้าหมายก่อนสแกน';
+        statusText.classList.replace('text-blue-400', 'text-yellow-400');
+        
+        meterFill.style.height = '0%';
+        scoreText.innerText = '0%';
+      }
+    });
 
     resetBtn.addEventListener('click', () => {
       bottleCount = 0;
       countDisplay.innerText = '0';
     });
 
-    // เริ่มต้นระบบกล้อง
     window.addEventListener('DOMContentLoaded', initCamera);
   </script>
 </body>
