@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Excise Bottle Counter</title>
 <style>
 :root{
@@ -10,8 +10,8 @@
   --gray:#d9dde3; --dark:#0b1420; --panel:#132234; --muted:#8fa1b5;
   --green:#27c281; --red:#ef6262; --white:#f7f9fc;
 }
-*{box-sizing:border-box}
-html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--dark);color:var(--white);font-family:system-ui,-apple-system,"Segoe UI","Noto Sans Thai",sans-serif}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--dark);color:var(--white);font-family:system-ui,-apple-system,"Segoe UI","Noto Sans Thai",sans-serif;touch-action:none;overscroll-behavior:none;-webkit-text-size-adjust:100%;text-size-adjust:100%;user-select:none;-webkit-user-select:none}
 button,input{font:inherit}
 button{cursor:pointer}
 .app{height:100dvh;display:flex;flex-direction:column;max-width:900px;margin:auto;padding:10px;gap:9px}
@@ -25,6 +25,10 @@ h1{font-size:17px;margin:0;color:#fff}
 .stage{position:relative;flex:1;min-height:260px;border:1px solid #29415c;border-radius:18px;overflow:hidden;background:#000;box-shadow:0 12px 35px #0008}
 video{position:absolute;width:100%;height:100%;object-fit:cover}
 .overlay{position:absolute;inset:0;pointer-events:none}
+.captureToast{position:absolute;left:50%;top:22%;transform:translate(-50%,-50%) scale(.94);opacity:0;z-index:30;pointer-events:none;background:#0b2035ee;border:2px solid var(--gold);color:#fff;border-radius:14px;padding:11px 16px;font-weight:900;font-size:14px;box-shadow:0 10px 30px #0009;transition:opacity .12s,transform .12s;white-space:nowrap}
+.captureToast.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+.captureToast.capturing{opacity:1;transform:translate(-50%,-50%) scale(1);border-color:#62a9e8}
+.captureProgress{display:block;font-size:10px;color:#b9c9d9;margin-top:3px;font-weight:600}
 .roi{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:110px;height:110px;border:3px dashed var(--gold);border-radius:50%;box-shadow:0 0 0 9999px #06101a33,0 0 25px #e4b52b55;display:grid;place-items:center}
 .roi:before{content:"";width:7px;height:7px;background:var(--gold);border-radius:50%}
 .roi.locked{border-color:#62a9e8;box-shadow:0 0 0 9999px #06101a33,0 0 25px #1f8fff44}
@@ -72,6 +76,7 @@ input[type=range]{width:100%;accent-color:var(--gold)}
   <video id="webcam" autoplay playsinline muted></video>
   <div class="overlay">
     <div id="roi" class="roi"></div>
+    <div id="captureToast" class="captureToast">✓ Reference พร้อมใช้งาน</div>
     <div class="info">
       <div>SIM <b id="scoreText">0%</b></div>
       <div>BASE <b id="baseText">0%</b></div>
@@ -116,7 +121,7 @@ const graph=$("graph"), gctx=graph.getContext("2d");
 let track=null, scanning=false, template=null, count=0;
 let roiSize=110, state="IDLE", baseline=8, smooth=8, peak=8, peakDelta=0;
 let history=[], lastCountTime=0, eventCount=0, audioCtx=null;
-let referenceFrames=[], refCaptureLeft=0;
+let referenceFrames=[], refCaptureLeft=0, refTargetFrames=4, refCaptureBusy=false;
 
 const sensitivity=[
   {name:"ต่ำ", rise:8, minPeakDelta:12, fall:0.58, minWidth:5, rearm:5},
@@ -186,23 +191,61 @@ function featureScore(a,b){
 function smoothScore(v){
   smooth=smooth*.72+v*.28; return smooth;
 }
+function showCaptureToast(title, sub="", capturing=false){
+  const el=$("captureToast");
+  el.innerHTML = title + (sub ? `<span class="captureProgress">${sub}</span>` : "");
+  el.classList.toggle("capturing", capturing);
+  el.classList.add("show");
+}
+function hideCaptureToast(){
+  const el=$("captureToast"); el.classList.remove("show","capturing");
+}
 function captureReference(){
-  referenceFrames=[];refCaptureLeft=12;
-  $("status").textContent="กำลังเก็บ Reference… อย่าขยับ";
+  if(refCaptureBusy)return;
+  if(!video.videoWidth || !video.videoHeight){
+    $("status").textContent="รอกล้องพร้อมก่อน";
+    return;
+  }
+  refCaptureBusy=true;
+  referenceFrames=[];
+  refTargetFrames=4;
+  refCaptureLeft=4;
+
+  // Feedback is immediate: user knows the click was received.
+  roi.classList.add("locked");
+  lockBtn.textContent="⏺ กำลังล็อก Reference…";
+  lockBtn.disabled=true;
+  showCaptureToast("กำลังล็อก Reference", "เก็บภาพ 1/4 …", true);
+  $("status").textContent="กำลังเก็บ Reference…";
+  beep();
 }
 function finishReference(){
   const f=referenceFrames;
+  if(f.length<2){
+    refCaptureBusy=false; lockBtn.disabled=false; hideCaptureToast();
+    $("status").textContent="เก็บ Reference ไม่สำเร็จ ลองใหม่";
+    return;
+  }
   template={
     hist:Array.from({length:64},(_,i)=>f.reduce((a,x)=>a+x.hist[i],0)/f.length),
     mean:f.reduce((a,x)=>a+x.mean,0)/f.length,
     sd:f.reduce((a,x)=>a+x.sd,0)/f.length,
     edge:f.reduce((a,x)=>a+x.edge,0)/f.length
   };
-  scanning=true;state="IDLE";baseline=Math.min(...f.map(x=>featureScore(template,x)));
+  scanning=true;state="IDLE";
+  baseline=Math.min(...f.map(x=>featureScore(template,x)));
   if(!isFinite(baseline))baseline=8;
-  peak=baseline;history=[];referenceFrames=[];refCaptureLeft=0;
-  roi.classList.add("locked");lockBtn.textContent="🛑 หยุดการสแกน";lockBtn.classList.add("active");
-  $("status").textContent="กำลังสแกน"; beep();
+  // Give the detector a clean starting state.
+  smooth=baseline; peak=baseline; peakDelta=0; history=[];
+  referenceFrames=[];refCaptureLeft=0;refCaptureBusy=false;
+  lockBtn.disabled=false;
+  lockBtn.textContent="🛑 หยุดการสแกน";
+  lockBtn.classList.add("active");
+  roi.classList.add("locked");
+  $("status").textContent="กำลังสแกน";
+  showCaptureToast("✓ Reference พร้อมใช้งาน", `${f.length} frames • พร้อมนับ`, false);
+  setTimeout(hideCaptureToast,900);
+  beep();
 }
 function processEvent(score){
   const c=cfg(), prev=history.length?history[history.length-1]:score;
@@ -231,7 +274,7 @@ function processEvent(score){
 }
 function drawGraph(){
   const w=graph.clientWidth,h=graph.clientHeight;
-  if(graph.width!==w*devicePixelRatio){graph.width=w*devicePixelRatio;graph.height=h*devicePixelRatio;gctx.scale(devicePixelRatio,devicePixelRatio)}
+  if(graph.width!==w*devicePixelRatio || graph.height!==h*devicePixelRatio){graph.width=w*devicePixelRatio;graph.height=h*devicePixelRatio;gctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0)}
   gctx.clearRect(0,0,w,h);gctx.strokeStyle="#24384c";gctx.lineWidth=1;
   gctx.beginPath();gctx.moveTo(0,h-12);gctx.lineTo(w,h-12);gctx.stroke();
   if(history.length<2)return;
@@ -246,8 +289,11 @@ function loop(){
     if(scanning&&template){
       let raw=featureScore(template,f);
       if(refCaptureLeft>0){
-        referenceFrames.push(f);refCaptureLeft--;
-        $("status").textContent=`กำลังเก็บ Reference… ${12-refCaptureLeft}/12`;
+        referenceFrames.push(f);
+        refCaptureLeft--;
+        const done=refTargetFrames-refCaptureLeft;
+        showCaptureToast("กำลังล็อก Reference", `เก็บภาพ ${done}/${refTargetFrames} …`, true);
+        $("status").textContent=`กำลังเก็บ Reference… ${done}/${refTargetFrames}`;
         if(refCaptureLeft===0)finishReference();
       }else{
         const score=smoothScore(raw);
@@ -277,12 +323,21 @@ function loop(){
 lockBtn.onclick=()=>{
   if(!scanning){if(!video.videoWidth){$("status").textContent="รอกล้องพร้อมก่อน";return} captureReference();}
   else{
-    scanning=false;template=null;state="IDLE";history=[];roi.className="roi";
+    scanning=false;template=null;state="IDLE";history=[];referenceFrames=[];refCaptureLeft=0;refCaptureBusy=false;roi.className="roi";hideCaptureToast();lockBtn.disabled=false;
     lockBtn.textContent="🔒 ล็อก Reference";lockBtn.classList.remove("active");
     $("status").textContent="หยุดการสแกน";$("scoreText").textContent="0%";
   }
 };
 resetBtn.onclick=()=>{count=0;eventCount=0;$("count").textContent="0";$("eventDebug").textContent="0"};
+document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});
+document.addEventListener("gesturechange",e=>e.preventDefault(),{passive:false});
+document.addEventListener("gestureend",e=>e.preventDefault(),{passive:false});
+document.addEventListener("wheel",e=>{
+  if(e.ctrlKey || e.shiftKey || e.deltaX!==0 || e.deltaY!==0) e.preventDefault();
+},{passive:false});
+document.addEventListener("touchmove",e=>{
+  if(e.target.tagName!=="INPUT" && e.target.tagName!=="BUTTON") e.preventDefault();
+},{passive:false});
 window.addEventListener("DOMContentLoaded",initCamera);
 </script>
 </body>
