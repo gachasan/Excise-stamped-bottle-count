@@ -107,7 +107,7 @@ input[type=range]{width:100%;accent-color:var(--gold)}
     <span>CONF <b id="confDebug">0%</b></span>
     <span>EVENTS <b id="eventDebug">0</b></span>
   </div>
-  <div class="help">เล็งบริเวณฝาขวด/จุดสีที่ต้องการ แล้วกดล็อก • เลื่อนกล้องให้วัตถุผ่านวงกลมทีละขวด</div>
+  <div class="help">เล็งบริเวณฝาขวด/จุดสีที่ต้องการ แล้วกดล็อก • เก็บ Reference 4 เฟรม (~120 ms/เฟรม) • เลื่อนกล้องให้วัตถุผ่านวงกลมทีละขวด</div>
 </section>
 </div>
 
@@ -122,6 +122,7 @@ let track=null, scanning=false, template=null, count=0;
 let roiSize=110, state="IDLE", baseline=8, smooth=8, peak=8, peakDelta=0;
 let history=[], lastCountTime=0, eventCount=0, audioCtx=null;
 let referenceFrames=[], refCaptureLeft=0, refTargetFrames=4, refCaptureBusy=false;
+let refCaptureTimer=null, refCaptureStartedAt=0, refCaptureIntervalMs=120, refCaptureMaxMs=2200;
 
 const sensitivity=[
   {name:"ต่ำ", rise:8, minPeakDelta:12, fall:0.58, minWidth:5, rearm:5},
@@ -206,23 +207,73 @@ function captureReference(){
     $("status").textContent="รอกล้องพร้อมก่อน";
     return;
   }
+
   refCaptureBusy=true;
   referenceFrames=[];
   refTargetFrames=4;
   refCaptureLeft=4;
+  refCaptureStartedAt=performance.now();
 
-  // Feedback is immediate: user knows the click was received.
   roi.classList.add("locked");
-  lockBtn.textContent="⏺ กำลังล็อก Reference…";
+  lockBtn.textContent="⏺ ล็อก…";
   lockBtn.disabled=true;
-  showCaptureToast("กำลังล็อก Reference", "เก็บภาพ 1/4 …", true);
+  showCaptureToast("กำลังล็อก Reference","เก็บภาพ 1/4",true);
   $("status").textContent="กำลังเก็บ Reference…";
   beep();
+
+  // Important: capture is driven by its own timer, not by the scan loop.
+  // This prevents the old deadlock where scanning=false/template=null
+  // made the loop skip the reference-capture branch forever.
+  const grab=()=>{
+    if(!refCaptureBusy)return;
+
+    if(video.readyState>=video.HAVE_CURRENT_DATA && video.videoWidth){
+      const f=features(circularImage());
+      if(f){
+        referenceFrames.push(f);
+        const done=referenceFrames.length;
+        refCaptureLeft=Math.max(0,refTargetFrames-done);
+
+        if(done<refTargetFrames){
+          lockBtn.textContent=`⏺ ${done}/${refTargetFrames}`;
+          showCaptureToast("กำลังล็อก Reference",`เก็บภาพ ${done+1}/${refTargetFrames}`,true);
+          $("status").textContent=`กำลังเก็บ Reference… ${done}/${refTargetFrames}`;
+        }else{
+          finishReference();
+          return;
+        }
+      }
+    }
+
+    // Absolute safety guard: never allow a capture to hang indefinitely.
+    if(performance.now()-refCaptureStartedAt>=refCaptureMaxMs){
+      if(referenceFrames.length>=2) finishReference();
+      else failReference();
+      return;
+    }
+    refCaptureTimer=setTimeout(grab,refCaptureIntervalMs);
+  };
+  grab();
 }
+
+function failReference(){
+  if(refCaptureTimer){clearTimeout(refCaptureTimer);refCaptureTimer=null;}
+  refCaptureBusy=false;
+  refCaptureLeft=0;
+  referenceFrames=[];
+  roi.classList.remove("locked");
+  lockBtn.disabled=false;
+  lockBtn.textContent="🔒 ล็อก Reference";
+  $("status").textContent="เก็บ Reference ไม่สำเร็จ ลองใหม่";
+  showCaptureToast("ล็อกไม่สำเร็จ","ลองกดใหม่อีกครั้ง",false);
+  setTimeout(hideCaptureToast,1200);
+}
+
 function finishReference(){
+  if(refCaptureTimer){clearTimeout(refCaptureTimer);refCaptureTimer=null;}
   const f=referenceFrames;
   if(f.length<2){
-    refCaptureBusy=false; lockBtn.disabled=false; hideCaptureToast();
+    refCaptureBusy=false; refCaptureLeft=0; lockBtn.disabled=false; hideCaptureToast();
     $("status").textContent="เก็บ Reference ไม่สำเร็จ ลองใหม่";
     return;
   }
@@ -288,14 +339,7 @@ function loop(){
     const f=features(img);
     if(scanning&&template){
       let raw=featureScore(template,f);
-      if(refCaptureLeft>0){
-        referenceFrames.push(f);
-        refCaptureLeft--;
-        const done=refTargetFrames-refCaptureLeft;
-        showCaptureToast("กำลังล็อก Reference", `เก็บภาพ ${done}/${refTargetFrames} …`, true);
-        $("status").textContent=`กำลังเก็บ Reference… ${done}/${refTargetFrames}`;
-        if(refCaptureLeft===0)finishReference();
-      }else{
+      {
         const score=smoothScore(raw);
         if(state==="IDLE") baseline=baseline*.985+score*.015;
         processEvent(score);
@@ -323,7 +367,9 @@ function loop(){
 lockBtn.onclick=()=>{
   if(!scanning){if(!video.videoWidth){$("status").textContent="รอกล้องพร้อมก่อน";return} captureReference();}
   else{
-    scanning=false;template=null;state="IDLE";history=[];referenceFrames=[];refCaptureLeft=0;refCaptureBusy=false;roi.className="roi";hideCaptureToast();lockBtn.disabled=false;
+    scanning=false;template=null;state="IDLE";history=[];referenceFrames=[];refCaptureLeft=0;refCaptureBusy=false;
+    if(refCaptureTimer){clearTimeout(refCaptureTimer);refCaptureTimer=null;}
+    roi.className="roi";hideCaptureToast();lockBtn.disabled=false;
     lockBtn.textContent="🔒 ล็อก Reference";lockBtn.classList.remove("active");
     $("status").textContent="หยุดการสแกน";$("scoreText").textContent="0%";
   }
