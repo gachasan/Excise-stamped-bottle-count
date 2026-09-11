@@ -5,116 +5,189 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Excise Bottle Counter</title>
 <style>
-:root{
-  --navy:#12365d; --blue:#1f5f99; --gold:#e4b52b; --yellow:#f2c94c;
-  --gray:#d9dde3; --dark:#0b1420; --panel:#132234; --muted:#8fa1b5;
-  --green:#27c281; --red:#ef6262; --white:#f7f9fc;
-}
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--dark);color:var(--white);font-family:system-ui,-apple-system,"Segoe UI","Noto Sans Thai",sans-serif;touch-action:none;overscroll-behavior:none;-webkit-text-size-adjust:100%;text-size-adjust:100%;user-select:none;-webkit-user-select:none}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI","Noto Sans Thai",system-ui,sans-serif;touch-action:none;overscroll-behavior:none;-webkit-text-size-adjust:100%;text-size-adjust:100%;user-select:none;-webkit-user-select:none}
 button,input{font:inherit}
-button{cursor:pointer}
-.app{height:100dvh;display:flex;flex-direction:column;max-width:900px;margin:auto;padding:10px;gap:9px}
-header{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.brand{display:flex;align-items:center;gap:10px}
-.logoMark{width:40px;height:40px;border-radius:50%;border:2px solid var(--gold);display:grid;place-items:center;background:linear-gradient(145deg,#173f6a,#0b1d31);font-weight:900;color:var(--gold);font-size:18px}
-h1{font-size:17px;margin:0;color:#fff}
-.sub{font-size:10px;color:var(--muted);margin-top:2px}
-.live{font-size:10px;border:1px solid #35516f;padding:5px 8px;border-radius:999px;color:var(--muted)}
-.live.on{color:#b9f4dc;border-color:#267b5b;background:#103b2c}
-.stage{position:relative;flex:1;min-height:260px;border:1px solid #29415c;border-radius:18px;overflow:hidden;background:#000;box-shadow:0 12px 35px #0008}
+
+/* FULLSCREEN VIDEO */
+.stage{position:fixed;inset:0;background:#000}
 video{position:absolute;width:100%;height:100%;object-fit:cover}
-.overlay{position:absolute;inset:0;pointer-events:none}
-.captureToast{position:absolute;left:50%;top:22%;transform:translate(-50%,-50%) scale(.94);opacity:0;z-index:30;pointer-events:none;background:#0b2035ee;border:2px solid var(--gold);color:#fff;border-radius:14px;padding:11px 16px;font-weight:900;font-size:14px;box-shadow:0 10px 30px #0009;transition:opacity .12s,transform .12s;white-space:nowrap}
-.captureToast.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
-.captureToast.capturing{opacity:1;transform:translate(-50%,-50%) scale(1);border-color:#62a9e8}
-.captureProgress{display:block;font-size:10px;color:#b9c9d9;margin-top:3px;font-weight:600}
-.roi{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:110px;height:110px;border:3px dashed var(--gold);border-radius:50%;box-shadow:0 0 0 9999px #06101a33,0 0 25px #e4b52b55;display:grid;place-items:center}
-.roi:before{content:"";width:7px;height:7px;background:var(--gold);border-radius:50%}
-.roi.locked{border-color:#62a9e8;box-shadow:0 0 0 9999px #06101a33,0 0 25px #1f8fff44}
-.roi.detected{border-color:var(--green);box-shadow:0 0 0 9999px #06101a33,0 0 30px #27c28155}
-.info{position:absolute;left:10px;top:10px;background:#091421d9;border:1px solid #33485e;border-radius:10px;padding:7px 9px;font-size:10px;line-height:1.55}
-.info b{color:var(--gold)}
-.side{position:absolute;right:10px;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:6px}
-.meter{width:12px;height:150px;border-radius:8px;background:#1d2c3c;border:1px solid #40536a;overflow:hidden;position:relative}
-.fill{position:absolute;bottom:0;width:100%;height:0;background:var(--blue);transition:height .08s}
-.baseline{position:absolute;left:0;width:100%;height:2px;background:#75aee4}
-.peakline{position:absolute;left:0;width:100%;height:2px;background:var(--gold)}
-.score{font:700 11px ui-monospace,monospace;writing-mode:vertical-rl;transform:rotate(180deg);color:#dbe5ef}
-.graphWrap{position:absolute;left:10px;right:10px;bottom:10px;height:72px;background:#07111dcc;border:1px solid #2a4057;border-radius:10px;padding:4px}
-canvas{width:100%;height:100%}
-.controls{background:var(--panel);border:1px solid #29415c;border-radius:16px;padding:10px}
-.toprow{display:flex;justify-content:space-between;align-items:center;gap:8px}
-.countLabel{font-size:10px;color:var(--muted)}
-.count{font-size:34px;line-height:1;color:#8ff0c8;font-weight:900}
-.state{font-size:11px;color:var(--gold);font-weight:700;text-align:right}
-.buttons{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px}
-button{border:0;border-radius:11px;padding:10px;font-weight:800}
-.lock{background:var(--gold);color:#101923}
-.lock.active{background:#c95656;color:#fff}
-.reset{background:#26384c;color:#fff}
-.tuning{margin-top:9px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
-label{font-size:10px;color:#aab9c9;display:flex;justify-content:space-between;margin-bottom:4px}
-input[type=range]{width:100%;accent-color:var(--gold)}
-.debug{margin-top:8px;padding:7px 8px;border-radius:9px;background:#0a1725;border:1px solid #243a50;font:10px ui-monospace,monospace;color:#a9b8c8;display:flex;gap:10px;flex-wrap:wrap}
-.debug b{color:#fff}
-.help{font-size:9px;color:#6f849a;text-align:center;margin-top:7px}
-@media(max-width:560px){.app{padding:7px;gap:6px}.stage{min-height:240px}.graphWrap{height:58px}.tuning{grid-template-columns:1fr 1fr}.controls{padding:8px}}
+
+/* TOP BAR — minimal glass pill */
+.topbar{position:fixed;top:env(safe-area-inset-top,0);left:0;right:0;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;z-index:20;pointer-events:none}
+.topbar>*{pointer-events:auto}
+.brand-pill{display:flex;align-items:center;gap:8px;background:rgba(0,0,0,.45);backdrop-filter:blur(20px) saturate(1.8);-webkit-backdrop-filter:blur(20px) saturate(1.8);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:7px 13px}
+.brand-dot{width:7px;height:7px;border-radius:50%;background:#f5a623;flex-shrink:0}
+.brand-dot.green{background:#34d399}
+.brand-label{font-size:13px;font-weight:600;color:#fff;letter-spacing:-.01em}
+.live-pill{font-size:11px;font-weight:600;color:rgba(255,255,255,.45);background:rgba(0,0,0,.35);backdrop-filter:blur(14px) saturate(1.4);-webkit-backdrop-filter:blur(14px) saturate(1.4);border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:6px 11px;letter-spacing:.02em}
+.live-pill.on{color:#34d399;border-color:rgba(52,211,153,.25)}
+
+/* CENTER ROI */
+.roi-wrap{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:15;pointer-events:none;display:flex;align-items:center;justify-content:center}
+.roi{border:2px dashed rgba(245,166,35,.7);border-radius:50%;box-shadow:0 0 0 9999px rgba(0,0,0,.28);transition:border-color .2s,box-shadow .2s;display:flex;align-items:center;justify-content:center}
+.roi::after{content:"";width:5px;height:5px;border-radius:50%;background:rgba(245,166,35,.8);flex-shrink:0}
+.roi.locked{border-color:rgba(99,179,237,.8);box-shadow:0 0 0 9999px rgba(0,0,0,.28)}
+.roi.detected{border-color:rgba(52,211,153,.9);box-shadow:0 0 0 9999px rgba(0,0,0,.28),0 0 28px rgba(52,211,153,.3)}
+
+/* COUNT bubble — big, centered near top */
+.count-badge{position:fixed;top:50%;left:50%;transform:translate(-50%,-170%);z-index:20;pointer-events:none;text-align:center}
+.count-num{font-size:72px;font-weight:700;color:#fff;line-height:1;letter-spacing:-.04em;text-shadow:0 2px 24px rgba(0,0,0,.6)}
+.count-sub{font-size:11px;font-weight:500;color:rgba(255,255,255,.45);letter-spacing:.08em;text-transform:uppercase;margin-top:2px}
+
+/* CAPTURE TOAST */
+.toast{position:fixed;left:50%;top:28%;transform:translate(-50%,-50%) scale(.94);opacity:0;z-index:30;pointer-events:none;background:rgba(10,20,35,.88);backdrop-filter:blur(20px) saturate(1.6);-webkit-backdrop-filter:blur(20px) saturate(1.6);border:1px solid rgba(245,166,35,.35);color:#fff;border-radius:16px;padding:12px 18px;font-weight:700;font-size:13px;text-align:center;transition:opacity .15s,transform .15s;white-space:nowrap}
+.toast.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+.toast.capturing{border-color:rgba(99,179,237,.4)}
+.toast-sub{display:block;font-size:10px;color:rgba(180,200,220,.7);margin-top:3px;font-weight:500}
+
+/* METER — right side slim */
+.meter-wrap{position:fixed;right:16px;top:50%;transform:translateY(-50%);z-index:20;pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:6px}
+.meter{width:4px;height:120px;border-radius:4px;background:rgba(255,255,255,.1);position:relative;overflow:visible}
+.meter-fill{position:absolute;bottom:0;width:100%;border-radius:4px;background:rgba(99,179,237,.7);transition:height .08s}
+.meter-base{position:absolute;left:-3px;width:10px;height:1.5px;background:rgba(245,166,35,.6)}
+.meter-peak{position:absolute;left:-3px;width:10px;height:1.5px;background:rgba(255,255,255,.5)}
+.meter-val{font-size:10px;font-weight:600;color:rgba(255,255,255,.5);letter-spacing:.02em}
+
+/* GRAPH — bottom strip */
+.graph-wrap{position:fixed;left:0;right:0;bottom:0;height:56px;background:linear-gradient(to top,rgba(0,0,0,.7) 0%,transparent 100%);z-index:15;pointer-events:none}
+.graph-wrap canvas{width:100%;height:100%}
+
+/* BOTTOM CONTROLS — glass bar */
+.controls{position:fixed;bottom:env(safe-area-inset-bottom,0);left:0;right:0;z-index:20;padding:0 16px 16px}
+.ctrl-glass{background:rgba(12,18,28,.72);backdrop-filter:blur(28px) saturate(1.8);-webkit-backdrop-filter:blur(28px) saturate(1.8);border:1px solid rgba(255,255,255,.1);border-top:1px solid rgba(255,255,255,.06);border-radius:24px;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+
+/* Primary actions row */
+.btn-row{display:flex;gap:10px}
+.btn{border:0;border-radius:14px;padding:12px;font-weight:700;font-size:13px;flex:1;transition:transform .12s,background .15s;letter-spacing:-.01em;cursor:pointer}
+.btn:active{transform:scale(.97)}
+.btn-lock{background:rgba(245,166,35,1);color:#0a1020}
+.btn-lock.active{background:rgba(239,100,100,.9);color:#fff}
+.btn-reset{background:rgba(255,255,255,.1);color:rgba(255,255,255,.8);border:1px solid rgba(255,255,255,.1)}
+
+/* Sliders row */
+.sliders{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.slider-group{display:flex;flex-direction:column;gap:5px}
+.slider-label{font-size:10px;font-weight:600;color:rgba(255,255,255,.4);letter-spacing:.06em;text-transform:uppercase;display:flex;justify-content:space-between}
+.slider-label b{color:rgba(255,255,255,.65);font-weight:700}
+input[type=range]{width:100%;height:3px;accent-color:#f5a623;cursor:pointer}
+
+/* Debug strip */
+.debug{display:flex;gap:12px;flex-wrap:wrap}
+.debug-item{font-size:10px;font-weight:600;color:rgba(255,255,255,.3);letter-spacing:.03em}
+.debug-item b{color:rgba(255,255,255,.6)}
+
+/* Info overlay — left side */
+.info-overlay{position:fixed;left:14px;top:50%;transform:translateY(-50%);z-index:20;pointer-events:none;display:flex;flex-direction:column;gap:4px}
+.info-row{font-size:10px;font-weight:600;color:rgba(255,255,255,.35);letter-spacing:.04em}
+.info-row b{color:rgba(255,255,255,.65)}
+
+/* Zoom label */
+.zoom-badge{position:fixed;bottom:calc(env(safe-area-inset-bottom,0) + 190px);left:50%;transform:translateX(-50%);z-index:20;pointer-events:none;background:rgba(0,0,0,.5);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:4px 10px;font-size:11px;font-weight:700;color:rgba(255,255,255,.7);letter-spacing:.04em;opacity:0;transition:opacity .3s}
+.zoom-badge.show{opacity:1}
+
+/* Status text */
+.status-text{font-size:11px;font-weight:600;color:rgba(255,255,255,.45);text-align:right;letter-spacing:.01em}
+.status-row{display:flex;align-items:center;justify-content:space-between}
+
+@media(max-width:400px){
+  .count-num{font-size:58px}
+  .sliders{grid-template-columns:1fr 1fr}
+  .sliders .slider-group:last-child{grid-column:span 2}
+}
 </style>
 </head>
 <body>
-<div class="app">
-<header>
-  <div class="brand">
-    <div class="logoMark">ส</div>
-    <div><h1>Excise Bottle Counter</h1><div class="sub">Smart Peak Detection • Circular Reference</div></div>
-  </div>
-  <div id="cameraState" class="live">CAMERA OFF</div>
-</header>
 
-<section class="stage">
+<div class="stage">
   <video id="webcam" autoplay playsinline muted></video>
-  <div class="overlay">
-    <div id="roi" class="roi"></div>
-    <div id="captureToast" class="captureToast">✓ Reference พร้อมใช้งาน</div>
-    <div class="info">
-      <div>SIM <b id="scoreText">0%</b></div>
-      <div>BASE <b id="baseText">0%</b></div>
-      <div>PEAK <b id="peakText">0%</b></div>
-      <div>ΔPEAK <b id="deltaText">0%</b></div>
-    </div>
-    <div class="side"><div class="meter"><div id="fill" class="fill"></div><div id="baseLine" class="baseline"></div><div id="peakLine" class="peakline"></div></div><div id="verticalScore" class="score">0%</div></div>
-    <div class="graphWrap"><canvas id="graph"></canvas></div>
-  </div>
-</section>
+</div>
 
-<section class="controls">
-  <div class="toprow">
-    <div><div class="countLabel">จำนวนขวดที่ตรวจพบ</div><div id="count" class="count">0</div></div>
-    <div><div class="state">สถานะ: <span id="status">เปิดกล้องเพื่อเริ่ม</span></div><div class="sub">Peak → Falling → Count</div></div>
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="brand-pill">
+    <div id="brandDot" class="brand-dot"></div>
+    <span class="brand-label">Bottle Counter</span>
   </div>
-  <div class="buttons">
-    <button id="lockBtn" class="lock">🔒 ล็อก Reference</button>
-    <button id="resetBtn" class="reset">รีเซ็ตจำนวน</button>
+  <div id="cameraState" class="live-pill">OFF</div>
+</div>
+
+<!-- ROI circle -->
+<div class="roi-wrap">
+  <div id="roi" class="roi" style="width:110px;height:110px"></div>
+</div>
+
+<!-- COUNT -->
+<div class="count-badge">
+  <div id="count" class="count-num">0</div>
+  <div class="count-sub">ขวดที่ตรวจพบ</div>
+</div>
+
+<!-- TOAST -->
+<div id="captureToast" class="toast"></div>
+
+<!-- INFO LEFT -->
+<div class="info-overlay">
+  <div class="info-row">SIM <b id="scoreText">0%</b></div>
+  <div class="info-row">BASE <b id="baseText">0%</b></div>
+  <div class="info-row">PEAK <b id="peakText">0%</b></div>
+  <div class="info-row">Δ <b id="deltaText">0%</b></div>
+</div>
+
+<!-- METER RIGHT -->
+<div class="meter-wrap">
+  <div id="verticalScore" class="meter-val">0%</div>
+  <div class="meter">
+    <div id="fill" class="meter-fill"></div>
+    <div id="baseLine" class="meter-base"></div>
+    <div id="peakLine" class="meter-peak"></div>
   </div>
-  <div class="tuning">
-    <div><label>ขนาดวงกลม <b id="sizeLabel">110px</b></label><input id="sizeSlider" type="range" min="50" max="180" step="5" value="110"></div>
-    <div><label>ความไว <b id="sensLabel">กลาง</b></label><input id="sensSlider" type="range" min="0" max="2" step="1" value="1"></div>
+</div>
+
+<!-- GRAPH -->
+<div class="graph-wrap"><canvas id="graph"></canvas></div>
+
+<!-- ZOOM BADGE -->
+<div id="zoomBadge" class="zoom-badge">1.0×</div>
+
+<!-- BOTTOM CONTROLS -->
+<div class="controls">
+  <div class="ctrl-glass">
+    <div class="status-row">
+      <div class="debug">
+        <span class="debug-item">STATE <b id="stateDebug">IDLE</b></span>
+        <span class="debug-item">CONF <b id="confDebug">0%</b></span>
+        <span class="debug-item">EV <b id="eventDebug">0</b></span>
+      </div>
+      <div id="status" class="status-text">เปิดกล้องเพื่อเริ่ม</div>
+    </div>
+
+    <div class="btn-row">
+      <button id="lockBtn" class="btn btn-lock">ล็อก Reference</button>
+      <button id="resetBtn" class="btn btn-reset">รีเซ็ต</button>
+    </div>
+
+    <div class="sliders">
+      <div class="slider-group">
+        <div class="slider-label">วงกลม <b id="sizeLabel">110</b></div>
+        <input id="sizeSlider" type="range" min="50" max="180" step="5" value="110">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label">ความไว <b id="sensLabel">กลาง</b></div>
+        <input id="sensSlider" type="range" min="0" max="2" step="1" value="1">
+      </div>
+      <div class="slider-group">
+        <div class="slider-label">ซูม <b id="zoomLabel">1.0×</b></div>
+        <input id="zoomSlider" type="range" min="100" max="400" step="10" value="100">
+      </div>
+    </div>
   </div>
-  <div class="debug">
-    <span>STATE <b id="stateDebug">IDLE</b></span>
-    <span>SMOOTH <b id="smoothDebug">0%</b></span>
-    <span>CONF <b id="confDebug">0%</b></span>
-    <span>EVENTS <b id="eventDebug">0</b></span>
-  </div>
-  <div class="help">เล็งบริเวณฝาขวด/จุดสีที่ต้องการ แล้วกดล็อก • เก็บ Reference 4 เฟรม (~120 ms/เฟรม) • เลื่อนกล้องให้วัตถุผ่านวงกลมทีละขวด</div>
-</section>
 </div>
 
 <script>
 const $=id=>document.getElementById(id);
 const video=$("webcam"), roi=$("roi"), lockBtn=$("lockBtn"), resetBtn=$("resetBtn");
-const sizeSlider=$("sizeSlider"), sensSlider=$("sensSlider");
+const sizeSlider=$("sizeSlider"), sensSlider=$("sensSlider"), zoomSlider=$("zoomSlider");
 const canvas=document.createElement("canvas"), ctx=canvas.getContext("2d",{willReadFrequently:true});
 const graph=$("graph"), gctx=graph.getContext("2d");
 
@@ -123,6 +196,7 @@ let roiSize=110, state="IDLE", baseline=8, smooth=8, peak=8, peakDelta=0;
 let history=[], lastCountTime=0, eventCount=0, audioCtx=null;
 let referenceFrames=[], refCaptureLeft=0, refTargetFrames=4, refCaptureBusy=false;
 let refCaptureTimer=null, refCaptureStartedAt=0, refCaptureIntervalMs=120, refCaptureMaxMs=2200;
+let currentZoom=1.0, zoomTimer=null;
 
 const sensitivity=[
   {name:"ต่ำ", rise:8, minPeakDelta:12, fall:0.58, minWidth:5, rearm:5},
@@ -131,42 +205,85 @@ const sensitivity=[
 ];
 
 function cfg(){return sensitivity[+sensSlider.value]}
+
 function beep(){
   try{
-    audioCtx ||= new (window.AudioContext||window.webkitAudioContext)();
-    if(audioCtx.state==="suspended") audioCtx.resume();
-    const o=audioCtx.createOscillator(), g=audioCtx.createGain();
-    o.frequency.value=880; g.gain.value=.07; o.connect(g);g.connect(audioCtx.destination);
+    audioCtx||=new(window.AudioContext||window.webkitAudioContext)();
+    if(audioCtx.state==="suspended")audioCtx.resume();
+    const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+    o.frequency.value=880;g.gain.value=.07;o.connect(g);g.connect(audioCtx.destination);
     o.start();o.stop(audioCtx.currentTime+.09);
   }catch(e){}
 }
+
 function updateROI(){
-  roiSize=+sizeSlider.value; roi.style.width=roi.style.height=roiSize+"px";
-  canvas.width=roiSize;canvas.height=roiSize;$("sizeLabel").textContent=roiSize+"px";
+  roiSize=+sizeSlider.value;
+  roi.style.width=roi.style.height=roiSize+"px";
+  canvas.width=roiSize;canvas.height=roiSize;
+  $("sizeLabel").textContent=roiSize;
 }
-function updateSensitivity(){
-  $("sensLabel").textContent=cfg().name;
+function updateSens(){$("sensLabel").textContent=cfg().name}
+
+async function applyZoom(val){
+  currentZoom=val/100;
+  $("zoomLabel").textContent=currentZoom.toFixed(1)+"×";
+  $("zoomBadge").textContent=currentZoom.toFixed(1)+"×";
+  $("zoomBadge").classList.add("show");
+  clearTimeout(zoomTimer);
+  zoomTimer=setTimeout(()=>$("zoomBadge").classList.remove("show"),1400);
+  if(!track)return;
+  const caps=track.getCapabilities&&track.getCapabilities();
+  if(caps&&caps.zoom&&caps.zoom.min!=null){
+    const zMin=caps.zoom.min,zMax=caps.zoom.max;
+    const zTarget=zMin+(zMax-zMin)*((currentZoom-1)/3);
+    try{await track.applyConstraints({advanced:[{zoom:Math.min(zMax,Math.max(zMin,zTarget))}]});}catch(e){}
+  } else {
+    // CSS zoom fallback — scale the video with object-fit maintain
+    const s=currentZoom;
+    video.style.transform=`scale(${s})`;
+    video.style.transformOrigin="center center";
+  }
 }
-sizeSlider.oninput=updateROI; sensSlider.oninput=updateSensitivity; updateROI();updateSensitivity();
+
+zoomSlider.oninput=()=>applyZoom(+zoomSlider.value);
+sizeSlider.oninput=updateROI;
+sensSlider.oninput=updateSens;
+updateROI();updateSens();
 
 async function initCamera(){
   try{
-    const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"},width:{ideal:1280},height:{ideal:720}},audio:false});
-    video.srcObject=stream; await video.play(); track=stream.getVideoTracks()[0];
-    $("cameraState").textContent="CAMERA ON";$("cameraState").classList.add("on");
+    const stream=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}},
+      audio:false
+    });
+    video.srcObject=stream;
+    await video.play();
+    track=stream.getVideoTracks()[0];
+    // Check zoom support and adjust slider max
+    const caps=track.getCapabilities&&track.getCapabilities();
+    if(caps&&caps.zoom&&caps.zoom.max){
+      const nativeMax=caps.zoom.max;
+      const sliderMax=Math.min(Math.round(nativeMax*100),500);
+      zoomSlider.max=sliderMax;
+    }
+    $("cameraState").textContent="ON";
+    $("cameraState").classList.add("on");
+    $("brandDot").classList.add("green");
     requestAnimationFrame(loop);
   }catch(e){
     $("status").textContent="ไม่สามารถเปิดกล้อง: "+e.message;
   }
 }
+
 function circularImage(){
-  const s=roiSize, sx=video.videoWidth/2-s/2, sy=video.videoHeight/2-s/2;
+  const s=roiSize,sx=video.videoWidth/2-s/2,sy=video.videoHeight/2-s/2;
   ctx.clearRect(0,0,s,s);ctx.save();ctx.beginPath();ctx.arc(s/2,s/2,s/2,0,Math.PI*2);ctx.clip();
   ctx.drawImage(video,sx,sy,s,s,0,0,s,s);ctx.restore();
   return ctx.getImageData(0,0,s,s);
 }
+
 function features(img){
-  const d=img.data,s=img.width, hist=new Array(64).fill(0), lum=[];
+  const d=img.data,s=img.width,hist=new Array(64).fill(0),lum=[];
   let n=0,sum=0,sum2=0,edge=0;
   for(let y=1;y<s-1;y++)for(let x=1;x<s-1;x++){
     const dx=x-s/2,dy=y-s/2;if(dx*dx+dy*dy>(s/2-2)**2)continue;
@@ -178,9 +295,10 @@ function features(img){
     if(Math.abs(l-l1)+Math.abs(l-l2)>70)edge++;
   }
   hist.forEach((v,i)=>hist[i]=v/n);
-  const mean=sum/n, variance=Math.max(0,sum2/n-mean*mean);
-  return {hist,mean,sd:Math.sqrt(variance),edge:edge/n};
+  const mean=sum/n,variance=Math.max(0,sum2/n-mean*mean);
+  return{hist,mean,sd:Math.sqrt(variance),edge:edge/n};
 }
+
 function histSim(a,b){let s=0;for(let i=0;i<a.length;i++)s+=Math.min(a[i],b[i]);return s*100}
 function featureScore(a,b){
   const color=histSim(a.hist,b.hist);
@@ -189,67 +307,40 @@ function featureScore(a,b){
   const edge=Math.max(0,100-Math.abs(a.edge-b.edge)*600);
   return .55*color+.20*bright+.15*texture+.10*edge;
 }
-function smoothScore(v){
-  smooth=smooth*.72+v*.28; return smooth;
-}
-function showCaptureToast(title, sub="", capturing=false){
+function smoothScore(v){smooth=smooth*.72+v*.28;return smooth}
+
+function showCaptureToast(title,sub="",capturing=false){
   const el=$("captureToast");
-  el.innerHTML = title + (sub ? `<span class="captureProgress">${sub}</span>` : "");
-  el.classList.toggle("capturing", capturing);
+  el.innerHTML=title+(sub?`<span class="toast-sub">${sub}</span>`:"");
+  el.classList.toggle("capturing",capturing);
   el.classList.add("show");
 }
-function hideCaptureToast(){
-  const el=$("captureToast"); el.classList.remove("show","capturing");
-}
+function hideCaptureToast(){$("captureToast").classList.remove("show","capturing")}
+
 function captureReference(){
   if(refCaptureBusy)return;
-  if(!video.videoWidth || !video.videoHeight){
-    $("status").textContent="รอกล้องพร้อมก่อน";
-    return;
-  }
-
-  refCaptureBusy=true;
-  referenceFrames=[];
-  refTargetFrames=4;
-  refCaptureLeft=4;
+  if(!video.videoWidth||!video.videoHeight){$("status").textContent="รอกล้องพร้อมก่อน";return}
+  refCaptureBusy=true;referenceFrames=[];refTargetFrames=4;refCaptureLeft=4;
   refCaptureStartedAt=performance.now();
-
-  roi.classList.add("locked");
-  lockBtn.textContent="⏺ ล็อก…";
-  lockBtn.disabled=true;
+  roi.classList.add("locked");lockBtn.textContent="กำลังล็อก…";lockBtn.disabled=true;
   showCaptureToast("กำลังล็อก Reference","เก็บภาพ 1/4",true);
-  $("status").textContent="กำลังเก็บ Reference…";
-  beep();
-
-  // Important: capture is driven by its own timer, not by the scan loop.
-  // This prevents the old deadlock where scanning=false/template=null
-  // made the loop skip the reference-capture branch forever.
+  $("status").textContent="กำลังเก็บ Reference…";beep();
   const grab=()=>{
     if(!refCaptureBusy)return;
-
-    if(video.readyState>=video.HAVE_CURRENT_DATA && video.videoWidth){
+    if(video.readyState>=video.HAVE_CURRENT_DATA&&video.videoWidth){
       const f=features(circularImage());
       if(f){
         referenceFrames.push(f);
-        const done=referenceFrames.length;
-        refCaptureLeft=Math.max(0,refTargetFrames-done);
-
+        const done=referenceFrames.length;refCaptureLeft=Math.max(0,refTargetFrames-done);
         if(done<refTargetFrames){
-          lockBtn.textContent=`⏺ ${done}/${refTargetFrames}`;
+          lockBtn.textContent=`${done}/${refTargetFrames}`;
           showCaptureToast("กำลังล็อก Reference",`เก็บภาพ ${done+1}/${refTargetFrames}`,true);
-          $("status").textContent=`กำลังเก็บ Reference… ${done}/${refTargetFrames}`;
-        }else{
-          finishReference();
-          return;
-        }
+          $("status").textContent=`กำลังเก็บ… ${done}/${refTargetFrames}`;
+        }else{finishReference();return}
       }
     }
-
-    // Absolute safety guard: never allow a capture to hang indefinitely.
     if(performance.now()-refCaptureStartedAt>=refCaptureMaxMs){
-      if(referenceFrames.length>=2) finishReference();
-      else failReference();
-      return;
+      if(referenceFrames.length>=2)finishReference();else failReference();return;
     }
     refCaptureTimer=setTimeout(grab,refCaptureIntervalMs);
   };
@@ -258,25 +349,17 @@ function captureReference(){
 
 function failReference(){
   if(refCaptureTimer){clearTimeout(refCaptureTimer);refCaptureTimer=null;}
-  refCaptureBusy=false;
-  refCaptureLeft=0;
-  referenceFrames=[];
-  roi.classList.remove("locked");
-  lockBtn.disabled=false;
-  lockBtn.textContent="🔒 ล็อก Reference";
-  $("status").textContent="เก็บ Reference ไม่สำเร็จ ลองใหม่";
-  showCaptureToast("ล็อกไม่สำเร็จ","ลองกดใหม่อีกครั้ง",false);
+  refCaptureBusy=false;refCaptureLeft=0;referenceFrames=[];
+  roi.classList.remove("locked");lockBtn.disabled=false;lockBtn.textContent="ล็อก Reference";
+  $("status").textContent="ล็อกไม่สำเร็จ ลองใหม่";
+  showCaptureToast("ล็อกไม่สำเร็จ","กดปุ่มเพื่อลองใหม่");
   setTimeout(hideCaptureToast,1200);
 }
 
 function finishReference(){
   if(refCaptureTimer){clearTimeout(refCaptureTimer);refCaptureTimer=null;}
   const f=referenceFrames;
-  if(f.length<2){
-    refCaptureBusy=false; refCaptureLeft=0; lockBtn.disabled=false; hideCaptureToast();
-    $("status").textContent="เก็บ Reference ไม่สำเร็จ ลองใหม่";
-    return;
-  }
+  if(f.length<2){refCaptureBusy=false;refCaptureLeft=0;lockBtn.disabled=false;hideCaptureToast();$("status").textContent="ล็อกไม่สำเร็จ ลองใหม่";return}
   template={
     hist:Array.from({length:64},(_,i)=>f.reduce((a,x)=>a+x.hist[i],0)/f.length),
     mean:f.reduce((a,x)=>a+x.mean,0)/f.length,
@@ -286,104 +369,107 @@ function finishReference(){
   scanning=true;state="IDLE";
   baseline=Math.min(...f.map(x=>featureScore(template,x)));
   if(!isFinite(baseline))baseline=8;
-  // Give the detector a clean starting state.
-  smooth=baseline; peak=baseline; peakDelta=0; history=[];
+  smooth=baseline;peak=baseline;peakDelta=0;history=[];
   referenceFrames=[];refCaptureLeft=0;refCaptureBusy=false;
-  lockBtn.disabled=false;
-  lockBtn.textContent="🛑 หยุดการสแกน";
-  lockBtn.classList.add("active");
-  roi.classList.add("locked");
-  $("status").textContent="กำลังสแกน";
-  showCaptureToast("✓ Reference พร้อมใช้งาน", `${f.length} frames • พร้อมนับ`, false);
-  setTimeout(hideCaptureToast,900);
-  beep();
+  lockBtn.disabled=false;lockBtn.textContent="หยุดสแกน";lockBtn.classList.add("active");
+  roi.classList.add("locked");$("status").textContent="กำลังสแกน";
+  showCaptureToast("✓ พร้อมนับ",`${f.length} frames`);
+  setTimeout(hideCaptureToast,900);beep();
 }
+
 function processEvent(score){
-  const c=cfg(), prev=history.length?history[history.length-1]:score;
-  const rising=score-prev>=-0.7;
+  const c=cfg(),prev=history.length?history[history.length-1]:score;
   const falling=prev-score>=0;
   if(state==="IDLE"){
     if(score>baseline+c.rise){state="RISING";peak=score;peakDelta=score-baseline}
   }else if(state==="RISING"){
     if(score>peak){peak=score;peakDelta=peak-baseline}
-    if(falling && peakDelta>=c.minPeakDelta)state="PEAK";
+    if(falling&&peakDelta>=c.minPeakDelta)state="PEAK";
     else if(score<baseline+c.rearm)state="IDLE";
   }else if(state==="PEAK"){
     if(score>peak){peak=score;peakDelta=peak-baseline}
-    if(score<peak*c.fall && peakDelta>=c.minPeakDelta)state="FALLING";
+    if(score<peak*c.fall&&peakDelta>=c.minPeakDelta)state="FALLING";
   }else if(state==="FALLING"){
     if(score>peak*.93){state="PEAK";return}
     if(score<=baseline+c.rearm){
       const now=performance.now();
-      if(now-lastCountTime>250){
-        count++;eventCount++;lastCountTime=now;$("count").textContent=count;beep();
-      }
+      if(now-lastCountTime>250){count++;eventCount++;lastCountTime=now;$("count").textContent=count;beep()}
       state="IDLE";peak=score;peakDelta=0;roi.classList.remove("detected");
     }
   }
   roi.classList.toggle("detected",state!=="IDLE");
 }
+
 function drawGraph(){
   const w=graph.clientWidth,h=graph.clientHeight;
-  if(graph.width!==w*devicePixelRatio || graph.height!==h*devicePixelRatio){graph.width=w*devicePixelRatio;graph.height=h*devicePixelRatio;gctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0)}
-  gctx.clearRect(0,0,w,h);gctx.strokeStyle="#24384c";gctx.lineWidth=1;
-  gctx.beginPath();gctx.moveTo(0,h-12);gctx.lineTo(w,h-12);gctx.stroke();
+  if(graph.width!==w*devicePixelRatio||graph.height!==h*devicePixelRatio){
+    graph.width=w*devicePixelRatio;graph.height=h*devicePixelRatio;
+    gctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+  }
+  gctx.clearRect(0,0,w,h);
   if(history.length<2)return;
-  gctx.strokeStyle="#e4b52b";gctx.lineWidth=2;gctx.beginPath();
-  history.forEach((v,i)=>{const x=i*(w/(history.length-1)),y=h-4-(Math.max(0,Math.min(100,v))/100)*(h-8);i?gctx.lineTo(x,y):gctx.moveTo(x,y)});
+  gctx.strokeStyle="rgba(245,166,35,.6)";gctx.lineWidth=1.5;gctx.beginPath();
+  history.forEach((v,i)=>{
+    const x=i*(w/(history.length-1)),y=h-2-(Math.max(0,Math.min(100,v))/100)*(h-4);
+    i?gctx.lineTo(x,y):gctx.moveTo(x,y);
+  });
   gctx.stroke();
 }
+
 function loop(){
   if(video.readyState>=video.HAVE_ENOUGH_DATA){
     const img=circularImage();
     const f=features(img);
     if(scanning&&template){
-      let raw=featureScore(template,f);
-      {
-        const score=smoothScore(raw);
-        if(state==="IDLE") baseline=baseline*.985+score*.015;
-        processEvent(score);
-        history.push(score);if(history.length>90)history.shift();
-        peak=Math.max(peak,score);
-        peakDelta=Math.max(0,peak-baseline);
-        $("scoreText").textContent=Math.round(score)+"%";
-        $("verticalScore").textContent=Math.round(score)+"%";
-        $("baseText").textContent=Math.round(baseline)+"%";
-        $("peakText").textContent=Math.round(peak)+"%";
-        $("deltaText").textContent="+"+Math.round(peakDelta)+"%";
-        $("smoothDebug").textContent=Math.round(score)+"%";
-        $("stateDebug").textContent=state;
-        $("confDebug").textContent=Math.round(Math.min(100,peakDelta*4))+"%";
-        $("eventDebug").textContent=eventCount;
-        $("fill").style.height=Math.min(100,score)+"%";
-        $("baseLine").style.bottom=Math.min(100,baseline)+"%";
-        $("peakLine").style.bottom=Math.min(100,peak)+"%";
-        drawGraph();
-      }
+      const raw=featureScore(template,f);
+      const score=smoothScore(raw);
+      if(state==="IDLE")baseline=baseline*.985+score*.015;
+      processEvent(score);
+      history.push(score);if(history.length>90)history.shift();
+      peak=Math.max(peak,score);peakDelta=Math.max(0,peak-baseline);
+      $("scoreText").textContent=Math.round(score)+"%";
+      $("verticalScore").textContent=Math.round(score)+"%";
+      $("baseText").textContent=Math.round(baseline)+"%";
+      $("peakText").textContent=Math.round(peak)+"%";
+      $("deltaText").textContent="+"+Math.round(peakDelta)+"%";
+      $("stateDebug").textContent=state;
+      $("confDebug").textContent=Math.round(Math.min(100,peakDelta*4))+"%";
+      $("eventDebug").textContent=eventCount;
+      $("fill").style.height=Math.min(100,score)+"%";
+      $("baseLine").style.bottom=Math.min(100,baseline)+"%";
+      $("peakLine").style.bottom=Math.min(100,peak)+"%";
+      drawGraph();
     }
   }
   requestAnimationFrame(loop);
 }
+
 lockBtn.onclick=()=>{
-  if(!scanning){if(!video.videoWidth){$("status").textContent="รอกล้องพร้อมก่อน";return} captureReference();}
-  else{
-    scanning=false;template=null;state="IDLE";history=[];referenceFrames=[];refCaptureLeft=0;refCaptureBusy=false;
+  if(!scanning){
+    if(!video.videoWidth){$("status").textContent="รอกล้องพร้อมก่อน";return}
+    captureReference();
+  }else{
+    scanning=false;template=null;state="IDLE";history=[];referenceFrames=[];
+    refCaptureLeft=0;refCaptureBusy=false;
     if(refCaptureTimer){clearTimeout(refCaptureTimer);refCaptureTimer=null;}
     roi.className="roi";hideCaptureToast();lockBtn.disabled=false;
-    lockBtn.textContent="🔒 ล็อก Reference";lockBtn.classList.remove("active");
-    $("status").textContent="หยุดการสแกน";$("scoreText").textContent="0%";
+    lockBtn.textContent="ล็อก Reference";lockBtn.classList.remove("active");
+    $("status").textContent="หยุดการสแกน";
+    $("scoreText").textContent="0%";
   }
 };
+
 resetBtn.onclick=()=>{count=0;eventCount=0;$("count").textContent="0";$("eventDebug").textContent="0"};
+
+// Prevent zoom gestures
 document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});
 document.addEventListener("gesturechange",e=>e.preventDefault(),{passive:false});
 document.addEventListener("gestureend",e=>e.preventDefault(),{passive:false});
-document.addEventListener("wheel",e=>{
-  if(e.ctrlKey || e.shiftKey || e.deltaX!==0 || e.deltaY!==0) e.preventDefault();
-},{passive:false});
+document.addEventListener("wheel",e=>{if(e.ctrlKey||e.deltaX!==0||e.deltaY!==0)e.preventDefault()},{passive:false});
 document.addEventListener("touchmove",e=>{
-  if(e.target.tagName!=="INPUT" && e.target.tagName!=="BUTTON") e.preventDefault();
+  if(e.target.tagName!=="INPUT"&&e.target.tagName!=="BUTTON")e.preventDefault();
 },{passive:false});
+
 window.addEventListener("DOMContentLoaded",initCamera);
 </script>
 </body>
